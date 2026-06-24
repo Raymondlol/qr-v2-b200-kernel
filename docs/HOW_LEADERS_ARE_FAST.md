@@ -1,0 +1,31 @@
+# How the top qr_v2 submissions are ~10× faster (credible, triangulated)
+
+Method: 9-agent research workflow (academic SOTA + competition OSINT + backwards-reasoning + engineering + 3 adversarial refutations that ran numpy checks) cross-checked against this session's B200 microbenchmarks. Top-3 solutions are PRIVATE (comp ends 2026-06-30), so this is INFERENCE, but it survived adversarial refutation. Overall confidence: **medium-high on the algorithm, medium on the engineering specifics.**
+
+## Headline: it's the SAME algorithm we use — the gap is ENGINEERING, not algorithm
+The leaders use **shape-routed right-looking blocked compact-WY Householder QR with native flat (H,tau) output** — exactly our approach. They are NOT using a fundamentally different algorithm. We are on the right track; we're losing on kernel engineering.
+
+### Why NOT CholeskyQR / TSQR + reconstruction (ruled out)
+- CholeskyQR2 + Ballard–Demmel Modified-LU reconstruction sums to **~4.2 ms** for n=512 b=640 (adversary re-derived from anchors) — that's the **mid-board 2000–4300µs cluster**, not the 1332µs podium. The reconstruction adds an n³ batched LU, and ill-conditioning forces a shift + extra pass.
+- My B200 microbench confirms the trap: Gram AᵀA = 282µs (fast) but the triangular factorizations (Cholesky 4804µs, trsm/inverse 5890µs) are cuSOLVER/cuBLAS-bound; `A@Rinv` GEMM = 318µs (fast). CholeskyQR needs *custom* tensor-core Cholesky+trsm just to not lose.
+- Filename corroboration: top-3 are generic `submission.py`; `submission_tsqr.py` is **mid-board**. The reconstruction family did not win.
+- **But** the literature nuggets are real and worth keeping: Ballard/Demmel **Modified-LU reconstruction** (LU-without-pivoting of Q−S, S=−sgn(diagQ)) recovers exact flat (H,tau) from ANY orthonormal Q and is **provably backward-stable independent of condition number**; **shifted-CholeskyQR3** (shift s=11(mn+n(n+1))·u·‖A‖²) *does* rescue clustered (adversary verified orth=1.7e-13). So CholeskyQR is *robust*, just not *fast enough* once you pay reconstruction.
+
+## Where the 10× actually is (the engineering gap)
+1. **A warp-specialized persistent tensor-core GEMM engine for the tf32x3 trailing update.** We run the trailing at ~1.5% of TF32 peak via `torch.matmul`/basic Triton `tl.dot`; the leaders run a `tcgen05.mma` warp-specialized persistent kernel (TMA producer / MMA / epilogue warps, 128B swizzle, 2-SM M256 tiles) — gau.nernst-class **raw PTX**, or **TLX** (Triton Low-level eXtensions, the `triton_tlx` filename) as the Triton-native route. The >600µs CUDA-over-Triton gap on the board suggests a **pure-Triton stack may have a ceiling above 1332µs**. This is the BULK of the gap and the hardest to close.
+2. **Precision recipe: likely 1×TF32 + a single fp32 residual fixup, not our 3× tf32x3** (the `fixup_tf32` / `fixup_tf32_1024` filenames). tf32x3 is 3× the trailing FLOP; 1×TF32 is at the EDGE of the factor gate (adversary's precision sweep: worst factor ratio 0.787, i.e. the fact-5 "21>20" worst-of-640 failure). A cheap fixup recovering ~3 bits would give the last ~2×. **This is the single most testable lever for us.**
+3. **Register-file / multi-warp panel** (MAGMA-style: cache the m×nb panel in registers, one thread/row, unblocked geqr2 in-register). We have the warp idea (panel-warps = 5×) but not register-file caching.
+4. **Recursive blocking** to convert tall-skinny trailing GEMMs into square GEMMs (TPDS-2024 reports up to 8.67× FP32 on tensor cores).
+
+## Per-case budget (adversary-checked)
+n=512 b=640 ≈ 1.7ms with tf32x3 (trailing GEMM dominates) → needs the 1×TF32+fixup to reach ~1.3ms. n=4096 b=2 ≈ 6–8ms: trailing GEMM floor ~1.5–1.8ms, the rest is the reduction-bound serial panel critical path (n serial reflector steps at b=2) — this is what they shave to single digits and we cannot at b=2 (the geqrf-floor case).
+
+## Two numerical insights that explain why aggressive precision is safe
+- **Orthogonality is precision-INDEPENDENT** (adversary verified): the checker rebuilds Q from the stored *unit* reflectors, so Q is orthonormal by construction regardless of trailing-GEMM precision. **Only the factor residual is at risk.**
+- The factor residual is **‖A‖₁-relative**, dominated by the large columns, so errors in tiny ill-conditioned columns are absolutely negligible (the ~1000× margin).
+
+## Actionable for us (ranked)
+1. **1×TF32 trailing + a single fp32 residual fixup** — the testable ~2× lever (resolves the precision uncertainty; the likely podium differentiator).
+2. **A better trailing-GEMM engine** (TLX warp-specialized, or accept a pure-Triton ceiling) — the bulk of the gap, biggest lift.
+3. Register-file panel + recursive blocking — incremental.
+Reconstruction/CholeskyQR — **not worth it** (mid-board); keep Modified-LU only as a known fallback.
