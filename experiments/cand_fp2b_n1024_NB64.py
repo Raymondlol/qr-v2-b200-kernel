@@ -207,7 +207,7 @@ def _blocking(n):
     if n <= 512:
         return (128, 64)   # NB=128/ib=64 probe
     if n <= 1024:
-        return (256, 32)
+        return (64, 32)
     if n <= 2048:
         return (256, 16)
     return (256, 8)

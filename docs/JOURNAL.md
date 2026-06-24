@@ -14,7 +14,8 @@ Geomean (µs). "Modal" = my `gpu_bench` on Modal B200 (optimistic on tf32/fp16, 
 | cand_O | experiments/cand_O_NB256.py | ~12000 Modal | two-level **NB=256** (fatter K=256); n=512 19.8k→18.7k. 22/22 pass. |
 | tf32x3 | m3_tf32x3_14760us.py | **14760 official** | fused `tl.dot(input_precision="tf32x3")` batched-GEMM kernel (no hi/lo HBM split); Modal said ~10.7k but official 14760 ⇒ **Modal calibration discovered** |
 | **panel-warps** | m4_panelwarps_8580us_CONFIRMED.py | **8580 official** | launch `_panel_kernel` with `num_warps=4/8/16` by tile size. The per-CTA tile work was starved at 4 warps. **n=1024 54ms→10.9ms = 5× officially** (Modal only showed 2×). 1.72× official jump. |
-| route n=2048 | submission.py / m5 | **~8100 est** (Modal 8117) | route n=2048 (b=8) to the custom one-CTA panel+warps instead of geqrf: 76.8ms→35ms (2.2×). Official gain partial (n=2048 trailing is 1×TF32, Modal-optimistic). NOT yet officially submitted. |
+| **fused-panel** | submission.py (m5 + ib=64/NB=128 for n=512) | n=512 ~16.5k→~14.4k Modal | widen ib 32→64 (SRAM-max fused panel) + NB 256→128 for n=512; n=1024 unchanged. ~7% apples-to-apples (noise-swamped). 22/22. Full mega-kernel KILLED first by `microbench_trailing.py` (single-CTA trailing 1.4-3.8× slower than batched). |
+| route n=2048 | (folded into m5) | **~8100 est** (Modal 8117) | route n=2048 (b=8) to the custom one-CTA panel+warps instead of geqrf: 76.8ms→35ms (2.2×). Official gain partial (n=2048 trailing is 1×TF32, Modal-optimistic). NOT yet officially submitted. |
 
 ## Key technical facts established (with evidence)
 - **~1000× FP32 tolerance margin:** plain FP32 Householder gives scaled_factor_residual ≈ 0.016 vs gate 20.

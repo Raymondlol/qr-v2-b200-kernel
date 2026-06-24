@@ -205,7 +205,7 @@ def _blocking(n):
     if n <= 256:
         return (64, 64)
     if n <= 512:
-        return (128, 64)   # NB=128/ib=64 probe
+        return (256, 64)   # Phase 1a: widen ib for n=512 (fewer narrow within-panel updates)
     if n <= 1024:
         return (256, 32)
     if n <= 2048:
