@@ -3,9 +3,9 @@
 Read this first, then `README.md`. The `docs/` files are the full handoff.
 
 ## What this is
-A GPU MODE **qr_v2** kernel competition entry: batched square compact-Householder QR matching `torch.geqrf`, on **NVIDIA B200**, ranked by **geometric mean of 12 benchmark cases**. Deadline **2026-06-30**. We went **123203 → 8580 µs official** (14.4×, ~rank 90); leader is **1332 µs**.
-- **Current best = `submission.py`** (shape-routed two-level blocked compact-WY Householder; tf32x3 trailing for n≤512, 1×TF32 for n≥1024; fused Triton panel with per-tile `num_warps`; geqrf/custom routing by shape). 22/22 official tests pass.
-- The remaining ~6× gap to the leader is **kernel ENGINEERING (a warp-specialized raw-PTX/TLX tensor-core GEMM engine)**, NOT algorithm — see `docs/HOW_LEADERS_ARE_FAST.md`.
+A GPU MODE **qr_v2** kernel competition entry: batched square compact-Householder QR matching `torch.geqrf`, on **NVIDIA B200**, ranked by **geometric mean of 12 benchmark cases**. Deadline **2026-06-30**. Confirmed official: 123203 → **7788 µs** (V4). `submission.py` now = V4 + this session's engine attack = **5678 µs Modal ≈ ~5700 official est (1.38×, ~rank 61), 22/22 — NOT yet submitted, submit to confirm.** Leader **1292 µs**.
+- **Current best = `submission.py`** (shape-routed two-level blocked compact-WY Householder; tf32x3 trailing+gram for n≤512, 1×TF32 gram+trailing for n≥1024; adaptive-ib fused Triton panel nw=8; glue-fused apply; geqrf/custom routing by shape). 22/22.
+- **Corrected understanding (this session):** the bottleneck is NOT the trailing GEMM (only 21-26%) — it's the **PANEL (~40-50%, latency-bound)**. raw-PTX trailing engine = undeployable; Gluon tcgen05 = deployable but bounded ~1.1×. See `docs/HOW_LEADERS_ARE_FAST.md` + `docs/NEXT_STEPS.md`.
 
 ## ⚠️ HARD CONSTRAINTS — violating any = rejected or disqualified
 1. **NEVER write the substrings `stream` or `graph` ANYWHERE in a submission, including comments.** The submission checker does a naive static substring scan. `grep -niE "stream|graph" submission.py` MUST be empty before every submit. (No CUDA streams, no CUDA graphs, no cooperative-launch either — but the words alone also trip it.)
@@ -24,7 +24,7 @@ A GPU MODE **qr_v2** kernel competition entry: batched square compact-Householde
 - **Legacy** (single candidate): `modal run modal_app.py --submission <f> --stress`; `modal run modal_microbench.py --script experiments/<x>.py`. (raw-CUDA `modal_cuda.py` exists but raw CUDA is UNDEPLOYABLE in eval — see DEAD_ENDS.)
 
 ## What's already been tried (DO NOT re-explore — see `docs/DEAD_ENDS.md`)
-Mega-kernel/single-CTA trailing (1.4–3.8× slower than batched), naive CholeskyQR2 (22ms, torch chol/trsm are cuSOLVER-slow), fp8/nvfp4 (mantissa wall), lowprec-panel (panel is reduction-bound, not tensor-core), TSQR-output, stream-parallel & CUDA-graph (illegal), sub-tf32x3 precision (1×TF32 fails, 2-term risky), expanded GEMM autotune (no headroom).
+Mega-kernel/single-CTA trailing, naive CholeskyQR2 (cuSOLVER-slow; floor cases too — chol itself floor-bound), fp8/nvfp4 (mantissa wall), lowprec-panel, TSQR-output, stream/graph (illegal), sub-tf32x3 precision, expanded GEMM autotune. **This session (see DEAD_ENDS): raw-PTX/CUDA trailing engine (built+works but UNDEPLOYABLE — eval has no nvcc), Gluon tcgen05 (deployable but tl_dot slow / full pipeline = multi-day, bounded ~1.1×, parked on `gluon-tcgen05`), Tsolve-via-inverse (slower+margin regression), panel per-column streamline (bit-identical but REGRESSES), NB 256→128 (noise), CholeskyQR floor-breaker (reconstruction re-imports the panel).**
 
 ## Repo map
 `submission.py` (current best) · `milestones/` (score-tagged official versions, m4=8580 confirmed) · `experiments/` (all `cand_*.py` + `microbench_*.py` + `INDEX.md`) · `harness/` (CPU `check_local` + **`lab.py` = unified B200 lab** + gpu_bench + reference) · **`modal_lab.py` (PRIMARY runner)** / `modal_app.py` / `modal_microbench.py` / `modal_cuda.py` · `results/lab_log.jsonl` (structured run log) · `docs/` (README → **METHODOLOGY** → JOURNAL → DEAD_ENDS → NEXT_STEPS → HOW_LEADERS_ARE_FAST). Git: tagged milestones; branch `gluon-tcgen05` = parked deployable-tcgen05 investigation.

@@ -42,3 +42,21 @@ Each `cand_*.py` is a single-variable experiment. Numbers are Modal geomean unle
 | cand_gemmtune | WORSE (9752 vs 9184) | expanded GEMM autotune (14 cfg) — no basic-Triton headroom |
 
 Modal runners: `modal_app.py` (submission → gpu_bench) · `modal_microbench.py` (arbitrary script on B200).
+
+## Phase 3: engine attack + methodology + Gluon (2026-06-25). Modal≈official now (V4 7793 vs 7788).
+Audit re-derived the leader direction, then a profiler-driven engine attack: **7793→5678 Modal (1.38×)**, all in `submission.py`. Key turn: `profile_detailed.py`/`profile_phases.py` showed the trailing GEMM is only 21-26% (not THE gap); panel 40-46% (latency-bound); ~20% was elementwise GLUE.
+| file | result | note |
+|---|---|---|
+| cand_gram | 7793→6907 | T-factor Gram VtV → 1×TF32 for n≥1024 (well-cond unit reflectors). PROMOTED |
+| cand_adaptive_ib | 6907→6771 | grow ib as remaining m shrinks (`_max_ib`), under SRAM cap → fewer+fatter narrow updates (n=2048 1.14×). PROMOTED |
+| cand_tsolve | 7230 (WORSE) | Tsolve→inverse+GEMM: slower + margin 2.0→1.4× (1×TF32 GEMM vs fp32 solve). REJECTED → DEAD_ENDS |
+| cand_glue | 6771→5756 (1.18×) | drop redundant `.clone()`, fuse C−=V@Y (`_bmm3_sub`+baddbmm), diagonal-view assign. Caught autotune-in-place bug (needs `restore_value`). PROMOTED |
+| cand_pw8 | 5756→5678 | panel nw=8 (was 16/32 for large BN; microbench_panel showed 8 best, panel is latency-bound). PROMOTED |
+| cand_panelstream | 6083 (WORSE) | bit-identical panel per-column streamline REGRESSES (loop-carried dep hurts compiler). REJECTED → DEAD_ENDS |
+| cand_nb128 | 6052 (WORSE) | NB 256→128: blocking sweep "won" but full-run regressed = noise. REJECTED (blocking is optimal) |
+| microbench_floor_and_engine / engine_bakeoff / panel | diagnostics | trailing K-poor (cuBLAS 21-34%); panel latency-bound; blocked-chol beats cuSOLVER 2.86% @n=4096 |
+| microbench_cqr_floorbreak (text only) | — | CholeskyQR floor-breaker cost model (parked, see DEAD_ENDS) |
+| cuda_gate1/2/3 (modal_cuda.py) | built, DEAD | raw-PTX mma.sync tf32x3 GEMM: ~1.2× over Triton but UNDEPLOYABLE (eval has no nvcc) |
+| gluon_gate1/2, gluon_*recon/dump (branch gluon-tcgen05) | G1 ✓, G2 slow | Gluon tcgen05 = deployable warp-spec, but tl_dot is 61-76 TF/s; competitive needs multi-day warp-spec pipeline, bounded ~1.1×. PARKED |
+
+**Tooling upgrade:** `harness/lab.py` + `modal_lab.py` replace the one-run-per-candidate loop — same-container variance-aware A/B (stderr ~1-2µs vs old ±15% noise) + fast correctness gate + profile + JSON log. **Use it (docs/METHODOLOGY.md).** Helper copies `sub_now.py`/`sub_profile.py` were transient (deleted).

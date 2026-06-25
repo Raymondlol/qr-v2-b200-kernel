@@ -1,10 +1,10 @@
 # qr_v2 — Batched Compact-Householder QR kernel (GPU MODE competition)
 
-**One-line status:** best *confirmed* official score **8580 µs** (`milestones/m4_panelwarps_8580us_CONFIRMED.py`, ~rank 90); current best *candidate* **`submission.py`** = m4 + fused-panel (ib=64/NB=128 for n=512) + route-n=2048, 22/22 pass — **submit to confirm the official number** (~8000–8200 est). Leader is **1332 µs** (~6× ahead). Deadline **2026-06-30**.
+**One-line status:** last *confirmed* official **7788 µs** (`submissionV4`, id 834632); current **`submission.py`** = V4 + this session's engine attack (gram→1×TF32, adaptive-ib, glue-fusion, panel nw=8) = **5678 µs Modal ≈ ~5700 official est (1.38×, ~rank 61), 22/22 pass — NOT YET officially submitted; submit to confirm.** Leader **1292 µs**. Deadline **2026-06-30**.
 
-We investigated *why* the leaders are ~10× faster (9-agent research workflow + B200 microbenchmarks, survived adversarial refutation): **same algorithm as us (blocked compact-WY Householder); the gap is a warp-specialized raw-PTX/TLX tensor-core GEMM engine, not algorithm** — see `docs/HOW_LEADERS_ARE_FAST.md`. The precision floor is tf32x3 (mixed@640 has only ~2× margin); mega-kernel and CholeskyQR are both dead (`docs/DEAD_ENDS.md`).
+**Corrected understanding (this session's profiler overturned the old thesis):** the gap is NOT just a trailing-GEMM engine — the trailing GEMM is only **21–26%**; the **panel is ~40–50%** (latency-bound by the sequential reflector reduction chain) and is the real bottleneck. raw-PTX tcgen05 trailing engine: built + works (~1.2×) but **UNDEPLOYABLE** (no nvcc in eval) → dead. Gluon tcgen05 (`triton.experimental.gluon`, in stock triton 3.6.0) IS the deployable warp-spec path but bounded ~1.1× and doesn't touch the panel (parked on branch `gluon-tcgen05`). A two-level peer hits 3352 (rank 34) → ~1.7× headroom likely still exists in our own family. tf32x3 is the precision floor (mixed@640 ~2× margin). See `docs/HOW_LEADERS_ARE_FAST.md` + `docs/DEAD_ENDS.md`.
 
-This README is the handoff. Read `CLAUDE.md` first, then this, then `docs/JOURNAL.md` (how we got here), `docs/DEAD_ENDS.md` (what NOT to retry), `docs/HOW_LEADERS_ARE_FAST.md` (the gap analysis), `docs/NEXT_STEPS.md` (the path forward).
+This README is the handoff. Read `CLAUDE.md` first, then **`docs/METHODOLOGY.md` (how to run experiments — use `modal_lab.py`, NOT the old one-run-per-candidate loop)**, then `docs/JOURNAL.md` (how we got here), `docs/DEAD_ENDS.md` (what NOT to retry), `docs/NEXT_STEPS.md` (path forward), `docs/HOW_LEADERS_ARE_FAST.md`.
 
 ---
 

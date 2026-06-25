@@ -1,10 +1,10 @@
 # Next steps — the evidence-based path forward (updated after the full investigation)
 
 ## Immediate
-**Submit `submission.py`** (m4 panel-warps + fused-panel ib=64/NB=128 for n=512 + route-n=2048) to confirm the official number (~8000–8200 est, from 8580). `grep -niE "stream|graph" submission.py` → must be empty.
+**Submit `submission.py` to gpumode to confirm ~5700 official** (5678 Modal; Modal≈official now). It = V4 (7788 confirmed) + this session's gram→1×TF32, adaptive-ib, glue-fusion, panel nw=8 = 1.38×, 22/22. `grep -niE "stream|graph" submission.py` → empty. Run the lab harness for any new candidate (`docs/METHODOLOGY.md`), NOT the old loop.
 
 ## Where we are
-Best confirmed **8580 µs official** (~rank 90); leader **1332 µs**. We exhaustively mapped the landscape this session (see `DEAD_ENDS.md`, `HOW_LEADERS_ARE_FAST.md`). The verdict: **we are on the correct algorithm** (blocked compact-WY Householder, native flat (H,τ)); the ~6× gap is **kernel engineering**, and the *safe, cheap* levers are now exhausted.
+Last confirmed **7788 µs official** (V4); `submission.py` = **5678 Modal ≈ ~5700 (≈rank 61)**; leader **1292 µs**. The CHEAP deployable levers are now exhausted (gram/adaptive-ib/glue/panel-nw8/blocking). Profiler verdict: the bottleneck is the **PANEL (~40-50%, latency-bound by the sequential reflector reduction chain)** — NOT the trailing GEMM (21-26%). The remaining gap is research-grade: a fundamentally different panel kernel (my current one is tapped in Triton; a two-level peer hits 3352 so ~1.7× headroom likely exists in-family) OR the deployable-but-bounded Gluon tcgen05 engine (branch `gluon-tcgen05`).
 
 ## What's left, ranked by EV — UPDATED with the 2026-06-25 engine baseline
 
