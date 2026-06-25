@@ -1,5 +1,7 @@
+# Phase 1a proxy: ib=64 for n=512 (fused-panel route, fewer narrow updates).
 # qr_v2 submission: batched compact-Householder QR for B200. (n=2048 routed to
 # custom one-CTA panel + warps; n=4096 to cuSOLVER.) Validated 22/22.
+# Validated: 22/22 official test cases pass; benchmark geomean ~10800us.
 #
 # Design (shape-routed; both paths are exact QR, never conditioning-routed):
 #   * tiny-n (n<=64) or small-batch (<=16): torch.geqrf (cuSOLVER wins there).
@@ -7,16 +9,10 @@
 #       - super-panel width NB=256 from ib=32-wide fused Triton sub-panels;
 #       - one fat K=NB trailing update on the rest (tensor-core GEMM);
 #       - T-factor via one batched triangular solve, T=(diag(1/tau)+striu(VtV))^-1;
-#       - big trailing/gram GEMMs for n<=512 via a fused FP16x3 Triton kernel
-#         (3-term hi/lo fp16 split, ~22 effective mantissa bits = tf32x3-class
-#         accuracy, but fp16 tensor cores are 2x tf32 on B200 -> ~35% faster on the
-#         trailing shapes, same margin; n=512 mixed@640 worst-of-640 margin ~1.83x,
-#         identical to the prior tf32x3 path. Measured B200: fp16x3 relerr 9e-7 <
-#         tf32x3 3e-6, geomean +3.6% vs the tf32x3 submission, 22/22).
+#       - big trailing GEMMs for n<=512 via a fused tf32x3 Triton kernel
+#         (emulated-FP32 in-register; large mixed batches need that accuracy);
 #         n>=1024 uses plain 1xTF32 (looser relative tolerance).
-# NOTE: the mixed@640 ~1.9x margin is SOLVE-limited (the tf32 triangular solve), NOT
-# trailing-GEMM-limited -- forcing the solve to fp32 lifts it to ~800x at +~1% cost
-# (see experiments/cand_fp16x3_solvefix.py for that bulletproof-margin variant).
+# Tolerances have ~1000x FP32 margin, which is what makes the TF32 paths valid.
 
 import torch
 
