@@ -283,9 +283,9 @@ def _blocking(n):
     if n <= 512:
         return (128, 64)   # NB=128/ib=64 probe (ib stays 64 throughout -> precision floor untouched)
     if n <= 1024:
-        return (256, 128)  # ib_max; _max_ib caps at 32 where m large, 64/128 where m small
+        return (128, 128)  # NB 256->128 (blocking sweep: NB128 best post adaptive-ib+glue)
     if n <= 2048:
-        return (256, 128)  # ib_max; _max_ib caps at 16 where m large, growing as m shrinks
+        return (128, 128)  # NB 256->128 (sweep: n=2048 16018->15257, ~4.7%)
     return (256, 8)
 
 

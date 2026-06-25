@@ -226,8 +226,15 @@ if _HAS_TRITON:
         ptr = Hb + (K + rar)[:, None] * N + (K + car)[None, :]
         tmask = rmask[:, None] & cmask[None, :]
         tile = tl.load(ptr, mask=tmask, other=0.0)
+        # Latency-bound panel streamline (reassociation, NOT approximation — bit-
+        # identical, NumPy-verified max|dtile|=0.0 over 400 shapes): carry colj out of
+        # the rank-1 result `upd` (col j+1 of upd == next iter's tile col j+1) so the
+        # re-extract leaves the masked-tile-writeback -> read serialization; collapse
+        # the two full-tile where-writebacks into one nested where reusing v. alpha and
+        # xnorm2 stay separate direct masked sums (s-alpha^2 fusion has catastrophic
+        # cancellation near convergence -> reflector corruption).
+        colj = tl.sum(tl.where(car[None, :] == 0, tile, 0.0), axis=1)
         for j in range(BCOLS):
-            colj = tl.sum(tl.where(car[None, :] == j, tile, 0.0), axis=1)
             alpha = tl.sum(tl.where(rar == j, colj, 0.0))
             xnorm2 = tl.sum(tl.where(rar > j, colj * colj, 0.0))
             normfull = tl.sqrt(alpha * alpha + xnorm2)
@@ -240,12 +247,14 @@ if _HAS_TRITON:
             v = tl.where(rar == j, 1.0, v)
             w = tl.sum(v[:, None] * tile, axis=0)
             upd = tile - tau_j * (v[:, None] * w[None, :])
-            tile = tl.where(car[None, :] > j, upd, tile)
+            colj_next = tl.sum(tl.where(car[None, :] == (j + 1), upd, 0.0), axis=1)
             diagval = tl.where(need, beta, alpha)
-            newcol = tl.where(rar > j, colj * scale, colj)
-            newcol = tl.where(rar == j, diagval, newcol)
-            tile = tl.where(car[None, :] == j, newcol[:, None], tile)
+            newcol = tl.where(rar == j, diagval, v)
+            newcol = tl.where(rar < j, colj, newcol)
+            tile = tl.where(car[None, :] > j, upd,
+                            tl.where(car[None, :] == j, newcol[:, None], tile))
             tl.store(taub + K + j, tau_j, mask=(j < BWID))
+            colj = colj_next
         tl.store(ptr, tile, mask=tmask)
 
 

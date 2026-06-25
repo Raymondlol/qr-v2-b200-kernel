@@ -6,13 +6,21 @@
 ## Where we are
 Best confirmed **8580 µs official** (~rank 90); leader **1332 µs**. We exhaustively mapped the landscape this session (see `DEAD_ENDS.md`, `HOW_LEADERS_ARE_FAST.md`). The verdict: **we are on the correct algorithm** (blocked compact-WY Householder, native flat (H,τ)); the ~6× gap is **kernel engineering**, and the *safe, cheap* levers are now exhausted.
 
-## What's left, ranked by EV (all are hard / uncertain)
+## What's left, ranked by EV — UPDATED with the 2026-06-25 engine baseline
 
-### 1. Warp-specialized tensor-core GEMM engine for the tf32x3 trailing — THE gap, biggest lift
-We run the trailing at **~1.5 % of TF32 peak** (`torch.matmul` / basic Triton `tl.dot`; expanded autotune did NOT help). The leaders run a `tcgen05.mma` warp-specialized persistent kernel (TMA producer / MMA / epilogue warps, 128 B swizzle, 2-SM M256 tiles) — gau.nernst-class **raw PTX**, or **TLX** (Triton Low-level eXtensions, the `triton_tlx` board filename) as the Triton-native route. This is the bulk of the 6×. Risk: a **pure-Triton stack may have a ceiling above 1332 µs** (the >600 µs CUDA-over-Triton gap on the board). Effort: days, research-grade. **This is the only path to truly contend.**
+**Measured trailing-GEMM efficiency (`experiments/microbench_floor_and_engine.py`, B200):** on the REAL trailing shapes even *cuBLAS 1×TF32* reaches only **21–34 % of tf32 peak on the FAT updates** (n=512 fat 236 TFLOP/s/21 %; n=1024 fat 377/34 %) and a dismal **6–7 % on the THIN K=32 within-panel updates** (75 and 70 TFLOP/s). Our fused tf32x3 Triton kernel runs at **~10 % of its ÷3 ceiling and is ~6× slower than cuBLAS 1×TF32** on the fat shapes (n=512 fat: cuBLAS 136 µs vs ours 841 µs — ~2× slower even after normalizing for tf32x3's 3× work). So the old "~1.5 % of peak" figure was too pessimistic, but the headroom is real and it is **structured** — attack it in this order:
 
-### 2. n=4096 cooperative multi-CTA panel — breaks the last geqrf-floor case (~9 %)
-n=4096 b=2 = 52 ms via geqrf (only 2 one-CTA panels). A cooperative multi-CTA panel (atomic-counter spin-barriers, single stream — Triton has no clean grid-sync) could fill the GPU. Research-grade, ~20–30 % success odds (see the shelved plan `~/.claude/plans/mega-kernel-mighty-pony.md`). n=2048 is already won by routing.
+### 1a. Recursive / bigger-K blocking — kill the 6–7 % thin K=32 updates (EASIEST, structural)
+The two-level scheme does many narrow K=32 within-panel updates that run at ~6 % even on cuBLAS. Recursive blocking (square up the trailing GEMMs / widen K) converts these into the fat shapes that already hit 21–34 %. No new kernel — a blocking change. Highest EV-per-effort first step.
+
+### 1b. Best-achievable trailing impl — is our fused tf32x3 kernel even the right call?
+Our fused kernel is ~2× below cuBLAS on the fat shapes (after the tf32x3 factor). Re-test: 3×cuBLAS hi/lo split tf32x3 vs the fused Triton kernel vs a better-tuned/larger-tile Triton tf32x3, on the real shapes, same run. The journal's "fused beat the split" was an end-to-end Modal claim; the raw-GEMM gap (6×) says re-measure. Cheap, may give a quick 1.5–2× before any hard kernel work.
+
+### 1c. Warp-specialized / raw-PTX trailing engine — ATTEMPTED, BUILT, CONFIRMED NOT WORTH IT (2026-06-25)
+Built a correct cp.async double-buffered tf32x3 `mma.sync.m16n8k8` GEMM via load_inline (`experiments/cuda_gate{1,2,3}.py`, `modal_cuda.py`): ~1.2× over Triton's tf32x3 (51 TF/s n=1024). DEAD anyway — see DEAD_ENDS for the full writeup. Three compounding reasons: (1) trailing GEMM is only 26%/21% of n=512/n=1024 and n≥1024 already uses faster 1×TF32, so it only helps n=512 → **~1.5–2% geomean**; (2) **TLX absent**, persistent/TMA Triton variants worse; (3) **load_inline needs nvcc on the competition machine** (torch-only env doesn't have it) → likely undeployable. **The gap is NOT a faster trailing GEMM.** The real trailing lever is the DEPLOYABLE **bigger-K shape** (1a/1b): K-poor shapes cap even cuBLAS at 20–34%; bigger NB (now that adaptive-ib absorbs the narrow-update cost) lifts the existing kernels' efficiency — UNTESTED, cheap, the recommended next trailing experiment. The biggest single n=512 phase remains the **panel (41%, latency-bound by the sequential reflector dependency)** — needs a different panel algorithm, not a faster GEMM.
+
+### 2. n=4096 floor-breaker — PARKED (bounded ~3 %, needs 2–3 custom kernels)
+n=4096 b=2 = 52 ms via geqrf. Floor-probe showed a *blocked* Cholesky already beats cuSOLVER 2.86× (8.9 ms) — so a custom CholeskyQR floor-breaker is not dead — but the full path (CQR3-safe blocked chol + custom unpivoted-GETRFNP reconstruction) is ~35 ms = ~1.5× on ONE of twelve cases ≈ ~3 % geomean, for 2–3 hand-written kernels. Lower EV than the engine; revisit only if a custom blocked tensor-core Cholesky gets built anyway. (cooperative multi-CTA Householder panel is the alternative floor-breaker — same hardness, also parked.)
 
 ### 3. Risky ~3 %: fused 2-term-rounded trailing (`experiments/cand_fused2br.py`)
 Passes all 12 on benchmark seeds, ~5 % faster on n=512, but only **1.4× margin** on mixed@640 → reseed-DQ risk. Only if you accept the risk (can resubmit if it fails).

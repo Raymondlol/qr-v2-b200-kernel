@@ -330,10 +330,10 @@ def _factor_custom(A):
             if tri:
                 BN = triton.next_power_of_2(m)
                 BCOLS = triton.next_power_of_2(b)
-                # The panel is LATENCY-bound (sequential reflector reductions), so warps
-                # past 8 don't help and HURT (microbench_panel.py: first sub-panel best
-                # nw=8 for BN=512/1024/2048; nw=16/32 were 8-13% slower, nw=4 6x slower).
-                nw = 4 if BN <= 128 else 8
+                # more warps parallelize the per-CTA tile work (the panel bottleneck
+                # at large m); the one-program-per-matrix CTA otherwise serializes a
+                # [BN, BCOLS] tile through BCOLS columns on just 4 warps.
+                nw = 4 if BN <= 128 else (8 if BN <= 512 else (16 if BN <= 1024 else 32))
                 _panel_kernel[(B,)](H, tau, n, col, m, b, BN=BN, BCOLS=BCOLS,
                                     num_warps=nw)
             else:
