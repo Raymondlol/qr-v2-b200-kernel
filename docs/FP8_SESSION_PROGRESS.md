@@ -3,6 +3,24 @@
 Branch `fp8-fp4-attack`. This doc is the **checkpoint/recovery note** + the plan for overnight
 autonomous work. Each verified milestone = one git commit (see "Checkpoint protocol").
 
+## ✅ FINAL OUTCOME (2026-06-26) — SHIPPED a +3.6% win
+1. **fp8/fp4 verdict (the user's thesis): accuracy-VIABLE, speed-DEAD.** Sub-tf32 precision works
+   (the prior "wall" was a tf32-solve artifact, see below); fp8 e4m3 6-dot Ozaki holds mixed@640
+   m10.8 (SAFE). BUT fp8 is NOT a speed win: K-poor batched trailing shapes negate fp8's 4x
+   throughput — fused autotuned fp8-6dot = 941us ≈ fused tf32x3 1091us, and the Ozaki scale cost
+   makes it 3.7x slower realistically. fp4=fp8 throughput on B200 + more dots = strictly worse.
+2. **Solve-fix discovery:** mixed@640's "1.9x floor" = the tf32 triangular solve, not the trailing.
+   Forcing solve→fp32 → margin 1.83x→800x at +~1%. (`cand_fp16x3_solvefix`, `microbench_attrib`.)
+3. **1xTF32 trailing:** +7.1% geomean BUT mixed@640 worst-of-640 sfr→19.7 (m1.02) across seeds =
+   reseed-DQ near-certain. Not viable.
+4. **WINNER, SHIPPED to submission.py (tag `fp16x3-win`, commit f981cce):** FP16x3 trailing —
+   tf32x3-class accuracy (relerr 9e-7 < tf32x3 3e-6), but fp16 TC=2x tf32 → fat trailing 570 vs
+   876us. **Lab geomean +3.6% (6163.8→5947.3), 22/22, mixed@640 m1.83 = identical to the old
+   tf32x3 submission (no added DQ risk).** Strictly better than the prior submission.
+   - **Safe alt (not shipped):** `cand_fp16x3_solvefix` = fp16x3 + solve-fix = +2.4% AND margin
+     800x. Pick this if reseed-DQ safety > the last 1.2% of speed.
+
+
 ## BREAKTHROUGH (measured, trustworthy — see memory `qr-v2-solve-tf32-floor-artifact`)
 The documented "mixed@640 tf32x3 = 1.9x safe floor, no room below" was **WRONG** — it was a
 **tf32 triangular-SOLVE artifact**, not a trailing-GEMM precision wall.
