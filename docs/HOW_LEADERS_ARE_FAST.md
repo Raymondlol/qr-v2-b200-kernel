@@ -29,3 +29,11 @@ n=512 b=640 ≈ 1.7ms with tf32x3 (trailing GEMM dominates) → needs the 1×TF3
 2. **A better trailing-GEMM engine** (TLX warp-specialized, or accept a pure-Triton ceiling) — the bulk of the gap, biggest lift.
 3. Register-file panel + recursive blocking — incremental.
 Reconstruction/CholeskyQR — **not worth it** (mid-board); keep Modified-LU only as a known fallback.
+
+
+## MEASURED precision margins (mixed@640 is the binding constraint — key correction)
+The "~1000x margin" applies only to WELL-CONDITIONED cases. The **n=512 mixed batch=640** worst-of-640 is tight:
+- tf32x3: scaled_factor_residual **10.1 / gate 20 = 2.0x margin** (this is the SAFE floor).
+- fused 2-term-rounded (round-to-nearest tf32 split, keep data operand low bits): **1.4x margin**, ~5% faster than tf32x3 (`experiments/cand_fused2br.py`, fused Triton, passes all 12 on benchmark seeds).
+- 1xTF32: FAILS (3% over). 2-term-truncated: 1.0x (marginal fail).
+Since the competition RESEEDS (fails submissions that break on seed changes), a <2x margin is disqualification-risky → tf32x3 (2.0x) is the safe choice; 2-term-rounded is a risky ~3% geomean. There is NO safe precision win below tf32x3; the mixed worst-case pins it. The leader's sub-tf32x3 (if any) must use a margin-PRESERVING fixup (iterative refinement) OR accepts reseed risk. Also: expanded GEMM autotune (14 cfg) was WORSE than 5 cfg -> basic-Triton GEMM has no autotune headroom; the gap is the warp-specialized engine.

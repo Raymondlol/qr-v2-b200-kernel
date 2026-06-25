@@ -65,10 +65,16 @@ def bench_one(kernel, tc, max_repeats=1000, max_time_ns=30e9):
 
     # correctness gate (pre-timing)
     outs = [kernel(d.clone()) for d in data_list]
+    margin = ""
     for ref_d, out in zip(check_copy, outs):
         good, msg = reference.check_implementation(ref_d, out)
         if not good:
             return None, msg
+        import re as _re
+        m = _re.search(r"scaled_factor_residual=([0-9.eE+-]+)", msg or "")
+        if m:
+            sfr = float(m.group(1))
+            margin = f"sfr={sfr:.2f} margin={20.0/max(sfr,1e-9):.1f}x"
 
     durations = []
     t0 = time.perf_counter_ns()
@@ -90,7 +96,7 @@ def bench_one(kernel, tc, max_repeats=1000, max_time_ns=30e9):
             if err / mean < 0.001 or mean * len(durations) > max_time_ns or total > 120e9:
                 break
     mean = sum(durations) / len(durations)
-    return mean, f"runs={len(durations)} count={count}"
+    return mean, f"runs={len(durations)} count={count} {margin}"
 
 
 # Official test-set stress cases (correctness gate in real submission). If the
