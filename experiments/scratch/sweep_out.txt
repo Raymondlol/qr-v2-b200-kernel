@@ -1,0 +1,20 @@
+RESULT b=640 | fp32 | PASS | sfr=0.0152 | trail_dots=0 | 31s
+RESULT b=640 | tf32 | PASS | sfr=18 | trail_dots=0 | 29s
+RESULT b=640 | tf32x3 | PASS | sfr=0.0364 | trail_dots=0 | 47s
+RESULT b=640 | e4m3 kV=2 kCY=2 T=1 sV=per_tensor sCY=per_tensor | FAIL | sfr=nan | trail_dots=3 | 236s
+RESULT b=640 | e4m3 kV=3 kCY=3 T=2 sV=per_tensor sCY=per_tensor | PASS | sfr=2.13 | trail_dots=6 | 313s
+RESULT b=640 | e4m3 kV=4 kCY=4 T=3 sV=per_tensor sCY=per_tensor | PASS | sfr=0.067 | trail_dots=10 | 372s
+RESULT b=640 | e4m3 kV=2 kCY=2 T=1 sV=per_vec sCY=per_vec | FAIL | sfr=nan | trail_dots=3 | 241s
+RESULT b=640 | e4m3 kV=2 kCY=3 T=2 sV=per_tensor sCY=per_tensor | FAIL | sfr=nan | trail_dots=5 | 271s
+RESULT b=640 | e4m3 kV=3 kCY=3 T=2 sV=per_vec sCY=per_vec | PASS | sfr=2.01 | trail_dots=6 | 306s
+RESULT b=640 | e4m3 kV=2 kCY=2 T=1 sV=per_tensor sCY=per_tensor | FAIL | sfr=nan | trail_dots=3 | 45s
+RESULT b=640 | e4m3 kV=3 kCY=3 T=2 sV=per_tensor sCY=per_tensor | PASS | sfr=1.72 | trail_dots=6 | 59s
+RESULT b=640 | e2m1 kV=4 kCY=4 T=3 sV=per_tensor sCY=per_tensor | FAIL | sfr=nan | trail_dots=10 | 483s
+RESULT b=640 | e2m1 kV=5 kCY=5 T=4 sV=per_tensor sCY=per_tensor | FAIL | sfr=nan | trail_dots=15 | 558s
+RESULT b=640 | e2m1 kV=6 kCY=6 T=5 sV=per_tensor sCY=per_tensor | PASS | sfr=4.72 | trail_dots=21 | 616s
+RESULT b=640 | e2m1 kV=3 kCY=3 T=2 sV=per_tensor sCY=per_tensor | FAIL | sfr=nan | trail_dots=6 | 357s
+RESULT b=640 | e2m1 kV=4 kCY=4 T=3 sV=per_vec sCY=per_vec | FAIL | sfr=nan | trail_dots=10 | 453s
+RESULT b=640 | e2m1 kV=5 kCY=5 T=4 sV=per_vec sCY=per_vec | PASS | sfr=12.9 | trail_dots=15 | 516s
+RESULT b=640 | e5m2 kV=3 kCY=3 T=2 sV=per_tensor sCY=per_tensor | PASS | sfr=17.3 | trail_dots=6 | 203s
+RESULT b=640 | e5m2 kV=4 kCY=4 T=3 sV=per_tensor sCY=per_tensor | PASS | sfr=0.988 | trail_dots=10 | 263s
+SWEEP DONE
