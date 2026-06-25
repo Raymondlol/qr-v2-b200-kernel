@@ -1,8 +1,10 @@
 # qr_v2 — Batched Compact-Householder QR kernel (GPU MODE competition)
 
-**One-line status:** best *confirmed* official score **8580 µs** (`milestones/m4_panelwarps_8580us_CONFIRMED.py`); current best *candidate* **~8100 µs est** (`submission.py`, not yet officially submitted — **submit it next to confirm**). Leader is **1332 µs** (~6× ahead). Deadline **2026-06-30**.
+**One-line status:** best *confirmed* official score **8580 µs** (`milestones/m4_panelwarps_8580us_CONFIRMED.py`, ~rank 90); current best *candidate* **`submission.py`** = m4 + fused-panel (ib=64/NB=128 for n=512) + route-n=2048, 22/22 pass — **submit to confirm the official number** (~8000–8200 est). Leader is **1332 µs** (~6× ahead). Deadline **2026-06-30**.
 
-This README is the handoff. Read it, then `docs/JOURNAL.md` (how we got here), `docs/DEAD_ENDS.md` (what NOT to retry), `docs/NEXT_STEPS.md` (the path forward).
+We investigated *why* the leaders are ~10× faster (9-agent research workflow + B200 microbenchmarks, survived adversarial refutation): **same algorithm as us (blocked compact-WY Householder); the gap is a warp-specialized raw-PTX/TLX tensor-core GEMM engine, not algorithm** — see `docs/HOW_LEADERS_ARE_FAST.md`. The precision floor is tf32x3 (mixed@640 has only ~2× margin); mega-kernel and CholeskyQR are both dead (`docs/DEAD_ENDS.md`).
+
+This README is the handoff. Read `CLAUDE.md` first, then this, then `docs/JOURNAL.md` (how we got here), `docs/DEAD_ENDS.md` (what NOT to retry), `docs/HOW_LEADERS_ARE_FAST.md` (the gap analysis), `docs/NEXT_STEPS.md` (the path forward).
 
 ---
 

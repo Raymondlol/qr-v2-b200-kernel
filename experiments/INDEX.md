@@ -30,3 +30,15 @@ Each `cand_*.py` is a single-variable experiment. Numbers are Modal geomean unle
 
 `scratch/` = `_force_*.py` helpers that force a specific code path for CPU correctness testing (the test shapes route to geqrf, so the custom path must be forced to validate it).
 `_INVALID_cand_L_streamgeqrf.py` = the illegal stream-parallel geqrf (kept as a record of why streams are banned).
+
+## Phase 2: mega-kernel investigation + leader research (2026-06-25)
+| file | result | note |
+|---|---|---|
+| cand_fp1a_ib64 / fp1b_NB128 / fp1c_NB64 | n=512 ~16.5k→14.4k | **fused-panel**: widen ib 32→64 (=SRAM-max fused panel) + NB tuning. NB=128/ib=64 best for n=512. In submission.py |
+| cand_fp2a/2b_n1024 | NB=128 much WORSE | n=1024 wants NB=256 (opposite of n=512); ib capped at 32 by SRAM |
+| microbench_trailing | 1-CTA 1.4-3.8× slower | KILLED full mega-kernel (single-CTA trailing loses to batched) |
+| microbench_choleskyqr / qr2 / cqr_components | CQR2 22ms > our 14ms | naive CholeskyQR dead: Gram fast (282µs) but torch chol(4804)/trsm(5890) cuSOLVER-slow; A@Rinv GEMM fast (318µs) |
+| cand_prec_1x/2a/2b/2br, cand_fused2br | tf32x3 is the floor | precision sweep: 1×TF32 fails mixed@640 (3% over), 2-term-rounded passes at 1.4× margin (risky), tf32x3 = 2.0× (safe) |
+| cand_gemmtune | WORSE (9752 vs 9184) | expanded GEMM autotune (14 cfg) — no basic-Triton headroom |
+
+Modal runners: `modal_app.py` (submission → gpu_bench) · `modal_microbench.py` (arbitrary script on B200).
