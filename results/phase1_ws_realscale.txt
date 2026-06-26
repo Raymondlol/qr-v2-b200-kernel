@@ -1,0 +1,64 @@
+✓ Initialized. View run at 
+https://modal.com/apps/raymxnd/main/ap-hArwGCXb1yDX7bG1yA14fp
+Building image im-OR1iC1AmgPSTOcJ1kDk2x6
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 583.14ms
+
+Built image im-OR1iC1AmgPSTOcJ1kDk2x6 in 2.24s
+
+
+Building image im-RmMM3mSlZ7C0VOd3Xia62c
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 687.27ms
+
+Built image im-RmMM3mSlZ7C0VOd3Xia62c in 1.56s
+
+
+✓ Created objects.
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/modal_m
+│   icrobench.py
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/experim
+│   ents
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/harness
+└── 🔨 Created function run.
+dev NVIDIA B200 triton 3.6.0
+
+=== correctness ===
+  MODE=0: mma relerr=7.51e-04, red relerr=1.90e-07
+  MODE=1: mma relerr=8.02e-04, red relerr=1.95e-07
+  SEQ OK, WS OK
+
+=== overlap sweep (NPROG=148, default nw=4, worker 4 warps) ===
+ NITER  NRED |      mma     red     sum     max |      SEQ      WS |  spdup   eff
+   256    32 |    188.6   143.4   332.0   188.6 |    308.5   188.6 |   1.64  1.00
+   512    64 |    334.0   246.4   580.4   334.0 |    573.3   336.3 |   1.70  0.99
+   768   128 |    481.0   451.0   932.0   481.0 |    948.5   542.5 |   1.75  0.87
+  1024   128 |    630.8   493.6  1124.5   630.8 |   1098.6   640.0 |   1.72  0.98
+  1024   192 |    699.3   657.0  1356.3   699.3 |   1323.8   783.8 |   1.69  0.86
+
+=== overlap sweep (NPROG=640, default nw=4, worker 4 warps) ===
+ NITER  NRED |      mma     red     sum     max |      SEQ      WS |  spdup   eff
+   512   146 |   1656.9  2426.9  4083.8  2426.9 |   4096.4  2766.0 |   1.48  0.80
+   768   220 |   2435.4  3610.4  6045.8  3610.4 |   6106.1  4114.4 |   1.48  0.80
+  1024   293 |   3192.7  4779.2  7971.9  4779.2 |   8099.0  5449.0 |   1.49  0.80
+  1024   192 |   3221.9  3173.2  6395.0  3221.9 |   6362.8  3769.4 |   1.69  0.83
+   768   146 |   2409.1  2455.3  4864.4  2455.3 |   4832.8  2839.9 |   1.70  0.84
+
+PHASE1.2 DONE (GO if WS nets >1.1x vs SEQ at NPROG=640 panel-dominated)
+
+--- STDERR ---
+
+Stopping app - local entrypoint completed.
+✓ App completed. View run at 
+https://modal.com/apps/raymxnd/main/ap-hArwGCXb1yDX7bG1yA14fp

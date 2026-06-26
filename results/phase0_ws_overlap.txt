@@ -1,0 +1,59 @@
+✓ Initialized. View run at 
+https://modal.com/apps/raymxnd/main/ap-eHy3GqhAXG8A4N6EaoP4Hp
+Building image im-1tre6UAEU05PjzSKvHmDo6
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 531.15ms
+
+Built image im-1tre6UAEU05PjzSKvHmDo6 in 1.21s
+
+
+Building image im-uhHw26e9ERVziP8BHAR9e3
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 883.89ms
+
+Built image im-uhHw26e9ERVziP8BHAR9e3 in 1.67s
+
+
+✓ Created objects.
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/modal_m
+│   icrobench.py
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/experim
+│   ents
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/harness
+└── 🔨 Created function run.
+dev NVIDIA B200 triton 3.6.0
+
+=== correctness ===
+  MODE=0: mma relerr=8.09e-04, red relerr=2.98e-07
+  MODE=1: mma relerr=7.40e-04, red relerr=1.88e-07
+  SEQ OK, WS OK
+
+=== overlap sweep (NPROG=148, default nw=4, worker 4 warps) ===
+ NITER  NRED |      mma     red     sum     max |      SEQ      WS |  spdup   eff
+   256    32 |    189.6   143.3   332.9   189.6 |    309.5   189.5 |   1.63  1.00
+   512    64 |    334.1   246.1   580.2   334.1 |    575.3   337.7 |   1.70  0.98
+   512    96 |    334.0   348.4   682.4   348.4 |    686.3   415.0 |   1.65  0.80
+   768   128 |    480.8   451.9   932.7   480.8 |    950.9   543.0 |   1.75  0.87
+  1024   128 |    628.9   472.6  1101.5   628.9 |   1101.1   643.1 |   1.71  0.97
+  1024   192 |    653.7   657.7  1311.3   657.7 |   1325.3   787.6 |   1.68  0.81
+   512   256 |    333.9   862.4  1196.3   862.4 |   1234.1   973.3 |   1.27  0.70
+   768   192 |    480.8   714.6  1195.4   714.6 |   1171.5   771.7 |   1.52  0.87
+
+PHASE0-WS DONE (GO if spdup>=1.3)
+
+--- STDERR ---
+
+Stopping app - local entrypoint completed.
+✓ App completed. View run at 
+https://modal.com/apps/raymxnd/main/ap-eHy3GqhAXG8A4N6EaoP4Hp

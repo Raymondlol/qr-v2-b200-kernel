@@ -2,6 +2,23 @@
 
 **Read this first, then `CLAUDE.md` + `docs/FP8_SESSION_PROGRESS.md` (the strategic map) + `docs/DEAD_ENDS.md` (do-not-retry).**
 
+> ## ✅ PHASE 0 + PHASE 1 = DONE, BOTH GO (2026-06-26). Design A chosen (flips the old "lean B").
+> Evidence: `results/phase0_ws_overlap.txt`, `results/phase1_ws_realscale.txt`, `results/phase1_trailing_penalty.txt`. Scripts: `experiments/gluon_ws_overlap.py`, `gluon_trailing_penalty.py`, `gluon_lowlevel_dump.py` (the canonical async tcgen05 recipe), `gluon_ws_dump.py`.
+> - **`gl.warp_specialize` EXISTS** in stock Gluon (the old recon checked `tl.warp_specialize` → wrong). `gl.warp_specialize([(default_fn,args),(worker_fn,args)], [worker_warps],[worker_regs])`. Partitions must NOT return tensors (flatten-return needs `_semantic`) → write outputs directly. `gl.warp_id` absent — but not needed.
+> - **Async tcgen05 recipe** (from `tl_dot_blackwell`): smem operands via `get_shared_memory_mma_operand` → `allocate_tensor_memory` → `fence_async_shared` → mbarrier alloc/init → `tcgen05_mma(..., mbarriers=[bar])` (**MUST pass mbarriers or it's SYNCHRONOUS**) → `mbarrier.wait`.
+> - **Overlap is real**: reduction (CUDA cores) hides behind async tcgen05 (tensor cores). eff 0.97–1.00 when MMA-dominated; eff 0.80–0.84 at grid=640 in the panel-dominated n=512 regime. Non-warp-spec single-partition = ZERO overlap (gl.sum is a CTA-collective that waits for the issuing warp).
+> - **Single-CTA trailing penalty at n=512 = only 1.12×** (tf32x3-equiv, tcgen05; the old 1.71× was tl.dot). 640 matrices fill 148 SMs → no occupancy penalty. (n=1024 = 2.31× → shape-route A to n≤512 only.)
+> - **Design-A net estimate ~1.26–1.3× on n=512 ≈ +9% geomean** (on the PROXY).
+>
+> ## ⛔ PHASE 1.5 DE-RISK (2026-06-26) = DESIGN A IS NO-GO. Do not build the in-CTA fused kernel.
+> Ported the REAL `_panel_kernel` to Gluon (`experiments/gluon_panel.py`, bit-faithful relerr ~1e-7) and co-hosted it with a real tcgen05 trailing in ONE CTA via warp_specialize (`experiments/gluon_panel_trailing.py`, `results/phase1.5_panel_coresidence_NOGO.txt`). At every real co-resident panel height (384/256/128, grid=640) **WS is 1.2–1.4× SLOWER than sequential (eff NEGATIVE)**. The panel keeps its [M,64] tile resident (~128 regs/thread); co-residing it with the trailing worker blows registers/occupancy + warp_specialize overhead (~485µs) > the hide-able trailing. **The Phase-0/1 LIGHTWEIGHT proxy masked this.** Lesson: validate overlap with the REAL register footprint.
+> ## 🔬 FULL DIAGNOSIS (deeper probing, `gluon_panel_salvage.py` + `gluon_panel_async.py`): design A needs TWO fixes
+> The regression has two independent causes, BOTH must be solved:
+> 1. **Worker must use LOW-LEVEL async tcgen05, NOT `tl_dot`** — `tl_dot`'s CTA-wide barrier couples the warp_specialize partitions → they serialize (eff 0.06). Low-level `tcgen05_mma(mbarriers=[private_bar])` does NOT couple → overlaps. **BUILT** (`gluon_panel_async.py::_async_trail_part`). Worker also needs 8w/128r (4w/64r starves it 3.3×).
+> 2. **Panel must be LOW-REGISTER (smem-resident)** — real register-resident panel ([M,64] tile ~96–128 regs) + async worker = 16 warps blows the 64K reg file → WS up to 2.7× SLOWER at M=384; only M=128 goes positive. PROOF the fix works: a LOW-reg reduction default || async worker at 16 warps overlaps at **eff 0.64–0.73** (`results/phase1.5_16warp_async.txt`).
+> - **Verdict: design A IS salvageable, but needs a SMEM-RESIDENT STREAMING PANEL rewrite** (reduction + rank-1 update stream row-blocks through smem, one block in registers) — multi-hour, residual risk = smem-panel speed. **Realistic payoff now ~+6% geomean** (eff~0.65 × trailing 26%), which EQUALS the zero-risk recursive-blocking fallback. So the smem-panel build is no longer clearly better EV.
+> - **Reusable BUILT+verified assets:** `gluon_panel.py` (panel port), `gluon_panel_async.py` (async tiled tcgen05 trailing worker + the no-coupling lesson), `gl.warp_specialize` mechanics, the full diagnostic chain. **Best official unchanged: V5 tf32x3 5915µs (net speed gain this session = 0).**
+
 ## TL;DR
 - **State:** `submission.py` = V5 tf32x3 = **5915µs official (confirmed best)**. Leader **1292µs (~4.6×)**. All cheap/deployable levers exhausted. Net last session = 0 speed (fp16x3 reverted as official wash) but produced the full "what's dead & why" map.
 - **The gap is the PANEL** = **~41% of n=512 runtime, latency-bound by the sequential reflector-reduction chain** (Householder's math; profiled in `experiments/profile_phases.py`: panel 41 / gram 15 / trailing 26 / solve 18). The trailing GEMM (26%) is already well-optimized; precision is settled (tf32x3; fp8/fp4 speed-dead; fp16x3 wash).

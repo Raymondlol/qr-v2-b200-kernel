@@ -1,0 +1,57 @@
+✓ Initialized. View run at 
+https://modal.com/apps/raymxnd/main/ap-oDjhpZOIDRWxTNIPz25B3Z
+Building image im-Ew9VqW3auoOKiIaTg9WyLN
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 1.47s
+
+Built image im-Ew9VqW3auoOKiIaTg9WyLN in 3.16s
+
+
+Building image im-bBi7gFzz8mxACRhW5IT641
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 1.09s
+
+Built image im-bBi7gFzz8mxACRhW5IT641 in 3.97s
+
+
+✓ Created objects.
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/modal_m
+│   icrobench.py
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/experim
+│   ents
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/harness
+└── 🔨 Created function run.
+dev NVIDIA B200 triton 3.6.0
+
+=== trailing-only at different warp counts (no warp_specialize) ===
+  trailing-only nw=8: 570.1 us
+  trailing-only nw=4: 817.8 us
+  trailing-only nw=2: 11075.7 us
+
+=== WS(trivial default || trailing worker): worker warp sweep ===
+  (default partition does ~nothing; isolates what warp_specialize does to the worker)
+  WS trivial||trail  worker=4w/64r: 1825.6 us
+  WS trivial||trail  worker=8w/64r: 869.0 us
+  WS trivial||trail  worker=8w/128r: 709.6 us
+  WS trivial||trail  worker=4w/128r: 1147.8 us
+
+DIAG: if trailing-only nw=4 ~= WS(trivial||trail,worker=4) -> pure warp-count (design-A
+  must split warps; overlap of half-warp panel||half-warp trail vs full sequential is the real Q).
+  If WS >> trailing nw=4 -> warp_specialize itself serializes/cripples the tcgen05 worker.
+
+--- STDERR ---
+
+Stopping app - local entrypoint completed.
+✓ App completed. View run at 
+https://modal.com/apps/raymxnd/main/ap-oDjhpZOIDRWxTNIPz25B3Z

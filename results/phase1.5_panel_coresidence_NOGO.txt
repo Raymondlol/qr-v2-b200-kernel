@@ -1,0 +1,53 @@
+✓ Initialized. View run at 
+https://modal.com/apps/raymxnd/main/ap-1guj239I9un4zqooLxDuuX
+Building image im-dY0qv8NmD34Ctk6CHop8V8
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 1.59s
+
+Built image im-dY0qv8NmD34Ctk6CHop8V8 in 4.18s
+
+
+Building image im-XldDiTVhLwSCQNljTzA9jH
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 730.71ms
+
+Built image im-XldDiTVhLwSCQNljTzA9jH in 4.09s
+
+
+✓ Created objects.
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/modal_m
+│   icrobench.py
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/experim
+│   ents
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/harness
+└── 🔨 Created function run.
+dev NVIDIA B200 triton 3.6.0
+
+=== correctness (M=384) ===
+  SEQ: panel relerr=3.20e-07  trailing(x3) relerr=7.76e-04  OK
+  WS: panel relerr=3.20e-07  trailing(x3) relerr=7.76e-04  OK
+
+=== overlap by panel HEIGHT (grid=640, panel default nw=8, worker 4w/64r) ===
+      M   panel   trail     sum     max |      SEQ      WS |  spdup   eff
+    384  1121.7   317.5  1439.2  1121.7 |   1381.2  1606.2 |   0.86 -0.87
+    256   624.4   396.6  1021.0   624.4 |    994.2  1403.1 |   0.71 -1.11
+    128   411.3   319.0   730.3   411.3 |    717.3   896.4 |   0.80 -0.58
+
+PHASE1.5 DONE (GO if eff>~0.6 for the real co-resident panel heights 384/256/128)
+
+--- STDERR ---
+
+Stopping app - local entrypoint completed.
+✓ App completed. View run at 
+https://modal.com/apps/raymxnd/main/ap-1guj239I9un4zqooLxDuuX

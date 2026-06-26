@@ -1,0 +1,66 @@
+✓ Initialized. View run at 
+https://modal.com/apps/raymxnd/main/ap-vu5XSbpOam5QvQwICKWVMq
+Building image im-pABJIrTsEXVtv7NcDmOQGj
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 1.09s
+
+Built image im-pABJIrTsEXVtv7NcDmOQGj in 2.26s
+
+
+Building image im-7FpreeJ9Sct6CO09iwFwA3
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 697.52ms
+
+Built image im-7FpreeJ9Sct6CO09iwFwA3 in 1.40s
+
+
+✓ Created objects.
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/modal_m
+│   icrobench.py
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/experim
+│   ents
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/harness
+└── 🔨 Created function run.
+dev NVIDIA B200 triton 3.6.0
+
+=== correctness ===
+  MODE=0: mma relerr=7.73e-04, red relerr=1.90e-07
+  MODE=1: mma relerr=7.80e-04, red relerr=1.91e-07
+  SEQ OK, WS OK
+
+=== overlap (NPROG=640, default nw=4, worker 4 warps = 8 total) ===
+ NITER  NRED |      mma     red     sum     max |      SEQ      WS |  spdup   eff
+   512   146 |   1558.0  2428.6  3986.5  2428.6 |   4090.3  2771.2 |   1.48  0.79
+  1024   293 |   3228.0  4780.4  8008.4  4780.4 |   8083.4  5467.3 |   1.48  0.79
+   768   146 |   2475.0  2465.6  4940.7  2475.0 |   4832.5  2887.3 |   1.67  0.83
+
+=== overlap (NPROG=640, default nw=8, worker 8 warps = 16 total) ===
+ NITER  NRED |      mma     red     sum     max |      SEQ      WS |  spdup   eff
+   512   146 |   1544.6   554.2  2098.8  1544.6 |   2036.5  1676.0 |   1.22  0.73
+  1024   293 |   3262.7  1046.5  4309.2  3262.7 |   4097.5  3528.6 |   1.16  0.68
+   768   146 |   2434.6   613.3  3047.9  2434.6 |   2823.7  2575.8 |   1.10  0.64
+
+=== overlap (NPROG=640, default nw=8, worker 4 warps = 12 total) ===
+ NITER  NRED |      mma     red     sum     max |      SEQ      WS |  spdup   eff
+   512   146 |   1638.6   617.2  2255.9  1638.6 |   2038.4  1723.0 |   1.18  0.79
+  1024   293 |   3287.6  1089.5  4377.0  3287.6 |   4128.5  3532.9 |   1.17  0.71
+   768   146 |   2464.1   605.7  3069.8  2464.1 |   2826.2  2490.1 |   1.13  0.93
+
+16-WARP DIAG DONE (if 8+8 overlaps like 4+4 -> 16-warp occupancy OK, blocker is tl_dot coupling)
+
+--- STDERR ---
+
+Stopping app - local entrypoint completed.
+✓ App completed. View run at 
+https://modal.com/apps/raymxnd/main/ap-vu5XSbpOam5QvQwICKWVMq

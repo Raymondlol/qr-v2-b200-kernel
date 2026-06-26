@@ -1,0 +1,49 @@
+✓ Initialized. View run at 
+https://modal.com/apps/raymxnd/main/ap-Pbzx8YcuRpEPUVwoFMhFw7
+Building image im-pY37Jy4d6u5xlThQesLugS
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 569.41ms
+
+Built image im-pY37Jy4d6u5xlThQesLugS in 1.35s
+
+
+Building image im-2mXpKzh37HgMYztIWwA4Yk
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 1.24s
+
+Built image im-2mXpKzh37HgMYztIWwA4Yk in 2.30s
+
+
+✓ Created objects.
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/modal_m
+│   icrobench.py
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/experim
+│   ents
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/harness
+└── 🔨 Created function run.
+dev NVIDIA B200 triton 3.6.0
+
+shape                                     (1)tldotX3 (2)batTC3 (3)1ctaTC3 |    3/1   3/2
+  (1)=batched tl.dot tf32x3 = CURRENT path;  (2),(3)=tcgen05 x3 passes (tf32x3-equiv timing)
+n=512 trailing  (b640,M512,K128,N384)          862.3     949.7      966.4 |   1.12  1.02   (1pass 1cta=487)
+n=1024 trailing (b60,M1024,K256,N768)          606.6     643.6     1401.8 |   2.31  2.18   (1pass 1cta=661)
+
+PHASE1.1 DONE (3/1 = REAL design-A trailing penalty at tf32x3; A viable if panel(41%) hidden
+  behind trailing(26%*penalty) nets >1.0: e.g. penalty<=1.58 => max(41,26*pen)<=67 always wins)
+
+--- STDERR ---
+
+Stopping app - local entrypoint completed.
+✓ App completed. View run at 
+https://modal.com/apps/raymxnd/main/ap-Pbzx8YcuRpEPUVwoFMhFw7

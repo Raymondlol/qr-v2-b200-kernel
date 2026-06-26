@@ -1,0 +1,70 @@
+✓ Initialized. View run at 
+https://modal.com/apps/raymxnd/main/ap-XDSpkGcQsYRSt6ZKy6ehj4
+Building image im-UtKO7u9AfLBIMnoOJtVvbZ
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 1.60s
+
+Built image im-UtKO7u9AfLBIMnoOJtVvbZ in 2.37s
+
+
+Building image im-pT8BD84f8BBRczPY20SNKq
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 745.45ms
+
+Built image im-pT8BD84f8BBRczPY20SNKq in 1.92s
+
+
+✓ Created objects.
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/modal_m
+│   icrobench.py
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/experim
+│   ents
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/harness
+└── 🔨 Created function run.
+dev NVIDIA B200 triton 3.6.0
+
+=== trailing-only at different warp counts (no warp_specialize) ===
+  trailing-only nw=8: 576.0 us
+  trailing-only nw=4: 821.4 us
+  trailing-only nw=2: 10692.0 us
+
+=== WS(trivial default || trailing worker): worker warp sweep ===
+  (default partition does ~nothing; isolates what warp_specialize does to the worker)
+  WS trivial||trail  worker=4w/64r: 1808.9 us
+  WS trivial||trail  worker=8w/64r: 876.4 us
+  WS trivial||trail  worker=8w/128r: 715.8 us
+  WS trivial||trail  worker=4w/128r: 1144.2 us
+
+=== DECISIVE: real panel(default 8w) || trailing(worker swept) — does design A work? ===
+      wkW/R   panel  trail8 |      SEQ      WS |  spdup   eff
+  8w/128r  1127.5   574.8 |   1682.9  4531.6 |   0.37 -5.13
+  8w/96r  1127.5   574.8 |   1682.6  3654.4 |   0.46 -3.55
+  4w/128r  1127.5   574.8 |   1682.0  2462.5 |   0.68 -1.41
+  8w/64r  1127.5   574.8 |   1684.0  2336.8 |   0.72 -1.17
+
+DIAG DONE (GO if any config gives spdup>1.1 with the REAL panel)
+
+=== SMEM-PANEL VIABILITY: low-reg reduction default (8w) || trailing(8w/128r) ===
+    NRED   redux  trail8 |      SEQ      WS |  spdup   eff
+     256   588.7   574.8 |   1020.1   993.6 |   1.03  0.06
+     512  1103.8   574.8 |   1464.5  1444.0 |   1.01  0.06
+     768  1622.3   574.8 |   1906.1  1890.5 |   1.01  0.05
+
+SMEM-PANEL PROXY DONE (GO -> build smem panel; NO-GO -> design A fully dead)
+
+--- STDERR ---
+
+Stopping app - local entrypoint completed.
+✓ App completed. View run at 
+https://modal.com/apps/raymxnd/main/ap-XDSpkGcQsYRSt6ZKy6ehj4

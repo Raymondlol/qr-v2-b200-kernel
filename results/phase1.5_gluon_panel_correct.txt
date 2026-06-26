@@ -1,0 +1,47 @@
+✓ Initialized. View run at 
+https://modal.com/apps/raymxnd/main/ap-450Scb1bh8AF3E9XAVAQs6
+Building image im-4tiB9GEKrwPibZdrrQTEAA
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 940.96ms
+
+Built image im-4tiB9GEKrwPibZdrrQTEAA in 1.84s
+
+
+Building image im-il3wyVK0UMrPso32uDnZDL
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 887.52ms
+
+Built image im-il3wyVK0UMrPso32uDnZDL in 1.84s
+
+
+✓ Created objects.
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/modal_m
+│   icrobench.py
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/experim
+│   ents
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/harness
+└── 🔨 Created function run.
+dev NVIDIA B200 triton 3.6.0
+  B=4 M=  64 b= 64: H relerr=8.96e-06  tau relerr=8.91e-06  OK
+  B=4 M= 128 b= 64: H relerr=1.53e-07  tau relerr=1.79e-07  OK
+  B=8 M= 512 b= 64: H relerr=1.55e-07  tau relerr=1.06e-07  OK
+  B=8 M= 256 b= 32: H relerr=1.10e-07  tau relerr=2.01e-07  OK
+
+GLUON PANEL PORT DONE
+
+--- STDERR ---
+
+Stopping app - local entrypoint completed.
+✓ App completed. View run at 
+https://modal.com/apps/raymxnd/main/ap-450Scb1bh8AF3E9XAVAQs6

@@ -1,0 +1,56 @@
+✓ Initialized. View run at 
+https://modal.com/apps/raymxnd/main/ap-Y0HBB9EMl1uOQ9nolEA5x0
+Building image im-XlwW4vky0DpvhB3X6YxEmG
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 590.23ms
+
+Built image im-XlwW4vky0DpvhB3X6YxEmG in 1.41s
+
+
+Building image im-6TPpDFMvYTQ2edvI6TDxrl
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 527.80ms
+
+Built image im-6TPpDFMvYTQ2edvI6TDxrl in 1.40s
+
+
+✓ Created objects.
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/modal_m
+│   icrobench.py
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/experim
+│   ents
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/harness
+└── 🔨 Created function run.
+dev NVIDIA B200 triton 3.6.0
+
+=== correctness (M=384) ===
+  SEQ: panel relerr=2.80e-07 trailing relerr=7.96e-04 OK
+  WS: panel relerr=2.80e-07 trailing relerr=7.96e-04 OK
+
+=== RESURRECTION: real panel(8w) || async tcgen05 trailing(worker) by height ===
+      M   panel   trail     sum     max |      SEQ      WS |  spdup   eff
+    384  1085.8   165.6  1251.4  1085.8 |   1294.2  4973.7 |   0.26-17.65  wk=8w/128r
+    384  1085.8   165.6  1251.4  1085.8 |   1295.2  3045.8 |   0.43 -8.36  wk=4w/128r
+    256   585.9   194.0   779.9   585.9 |    780.1  1056.5 |   0.74 -1.42  wk=8w/128r
+    256   585.9   194.0   779.9   585.9 |    780.1   804.3 |   0.97 -0.12  wk=4w/128r
+    128   382.4   159.3   541.7   382.4 |    531.5   502.1 |   1.06  0.20  wk=8w/128r
+    128   382.4   159.3   541.7   382.4 |    531.6   478.8 |   1.11  0.35  wk=4w/128r
+
+RESURRECTION DONE (GO if eff>~0.5 -> design A salvageable with async-tcgen05 worker)
+
+--- STDERR ---
+
+Stopping app - local entrypoint completed.
+✓ App completed. View run at 
+https://modal.com/apps/raymxnd/main/ap-Y0HBB9EMl1uOQ9nolEA5x0
