@@ -1,0 +1,20 @@
+STAGE 1A — REAL tf32x3 trailing GEMM via async tcgen05 (B200) — GO
+==================================================================
+The existing _async_trail_part is a PROXY (NPASS * same A@B). Built the real tf32x3:
+split A->Ah,Al / B->Bh,Bl (mask -8192), 3 dependent tcgen05_mma into one TMEM acc with
+use_acc chaining (Ah@Bh, +Ah@Bl, +Al@Bh), one mbarrier(count=3).
+
+Correctness (relerr vs fp64):
+  8x128x128x128 : async 2.52e-06  (_bmm3 2.29e-07)  n_regs=128 spills=0
+  8x512x128x384 : async 2.49e-06  (_bmm3 2.08e-07)  n_regs=128 spills=0
+  8x256x16x256  : async 8.89e-07  (_bmm3 2.02e-07)  n_regs=56  spills=0
+  -> async = naive 3-term tf32x3 ~19-20 bit (~2.5e-6); Triton's tf32x3 ~22 bit (~2e-7).
+     RISK: mixed@640 floor is at tf32x3 ~22 bit -> may need a 4th term (Al@Bl) or better split.
+
+Speed (fat trailing B=640 M=512 K=128 N=384):
+  _bmm3 (current tf32x3 Triton) : 835 us  (BASELINE)
+  async BM=64 BN=128            : 926 us   1.11x  <- viable
+  async BM>=128 or BN>=256      : smem OOM (hi+lo = 4 operands, 228KB cap)
+VERDICT: GO. Real tf32x3 async tcgen05 trailing is correct + 1.11x the current trailing
+(and in design A it runs CONCURRENT with the panel -> hidden). BM=64 forced by smem.
+TODO before submit: close the ~19->22 bit precision gap (4th term Al@Bl) and re-check mixed@640.
