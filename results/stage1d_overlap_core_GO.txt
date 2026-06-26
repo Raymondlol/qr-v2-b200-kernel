@@ -1,0 +1,26 @@
+STAGE 1D — buildable design-A CORE: warp_specialize(rowmagma sub-panel || far-trailing 2-GEMM slice)
+====================================================================================================
+Avoids the hard in-kernel super-panel factor: within-applies/gram/T stay torch; only the
+latency-bound rowmagma panel (CUDA-core) overlaps the far-trailing apply (tensor-core). W1
+resident in smem (slice SLW=32 -> no OOM). Worker = async tcgen05 (not tl_dot).
+
+Correctness (M=512 sub-panel, BB=128 block, SLW=32 slice; grid=640):
+  WS: panel relerr 1.5e-7, apply relerr 2.5e-6  -> BOTH CORRECT under warp_specialize.
+  n_regs=128 spills=182 (worker 252 standalone; co-resident with panel 108 over-subscribes).
+
+Overlap (grid=640, M=512; note: run() clones H each call -> absolute us inflated, eff is the signal):
+  wk=8/128: SEQ 580 WS 556  spd 1.04  eff 0.17  (worker reg-starved)
+  wk=8/160: SEQ 581 WS 516  spd 1.13  eff 0.45  (worker spills 182 -> caps eff)
+
+VERDICT: GO (core proven). A correct, overlapping design-A core exists: 1.13x on the sub-step,
+eff 0.45. The worker spilling (182, over the 256/thread-pair budget) caps eff; reducing worker
+regs (smaller SLW, buffer reuse) should lift it.
+
+REMAINING for a lab number (the intricate wiring, ~bug-prone):
+  Restructure _factor_custom (n<=512, ib=16) with sub-panel look-ahead:
+    factor super-panel 0 normally; then per super-panel k: compute T_k (torch gram+solve),
+    VT_k = V_k@T_k^T (torch, ONE extra GEMM, reused across slices); look-ahead apply block(k)
+    to super-panel(k+1) cols; then 8x { fused(rowmagma subpanel_j || trail_slice_j) ; within-apply_j }.
+  NET-WIN UNCERTAIN end-to-end: the overlap (~1.13x on panel+far-trailing) competes with EXTRA
+  serial glue (VT_k precompute GEMM, the look-ahead split) + the still-serial within-applies/gram/
+  solve. Realistic ~+3-7% geomean; could wash if glue overhead is high. Only a lab compare settles it.
