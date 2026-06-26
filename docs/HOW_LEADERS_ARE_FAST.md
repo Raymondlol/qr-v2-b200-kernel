@@ -33,6 +33,8 @@ Reconstruction/CholeskyQR — **not worth it** (mid-board); keep Modified-LU onl
 
 
 ## MEASURED precision margins (mixed@640 is the binding constraint — key correction)
+> **⚠️ SUPERSEDED (2026-06-26, branch `fp8-fp4-attack`, see `docs/FP8_SESSION_PROGRESS.md` + memory `qr-v2-solve-tf32-floor-artifact`):** the "tf32x3 = 2.0× = SAFE floor, NO safe win below it, and the lever is 1×TF32+fixup" framing in this section is WRONG. The 2.0× margin was a **tf32 triangular-SOLVE artifact** (cuBLAS trsm honored `allow_tf32=True`), NOT a trailing-GEMM wall — `solve→fp32` gives ~800× margin. The realized deployable trailing-precision win is **FP16x3** (=tf32x3-class ~22-bit accuracy, fp16 TC = 2× tf32, +3.6% geomean, SHIPPED, m1.83). **1×TF32 trailing was MEASURED reseed-DQ** (mixed@640 worst-of-640 sfr 19.7, margin 1.02 across 12 seeds — `experiments/microbench_1x_reseed.py`), so retire the "1×TF32+fixup" recommendation in §2/Actionable above. fp8/fp4 = accuracy-viable (m10.8 @ 6 Ozaki dots) but speed-dead (K-poor shape; dedicated tcgen05 cores verified used). The "warp-specialized GEMM engine is the gap" thesis still stands. Original (now-wrong) text below for history:
+
 The "~1000x margin" applies only to WELL-CONDITIONED cases. The **n=512 mixed batch=640** worst-of-640 is tight:
 - tf32x3: scaled_factor_residual **10.1 / gate 20 = 2.0x margin** (this is the SAFE floor).
 - fused 2-term-rounded (round-to-nearest tf32 split, keep data operand low bits): **1.4x margin**, ~5% faster than tf32x3 (`experiments/cand_fused2br.py`, fused Triton, passes all 12 on benchmark seeds).
