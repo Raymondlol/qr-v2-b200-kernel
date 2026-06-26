@@ -1,0 +1,44 @@
+✓ Initialized. View run at 
+https://modal.com/apps/raymxnd/main/ap-kyhYadWeQytCsvKjNV25Tw
+✓ Created objects.
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/modal_m
+│   icrobench.py
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/experim
+│   ents
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/harness
+└── 🔨 Created function run.
+dev NVIDIA B200
+Safe path = fp32 Gram + shifted CQR3 (PASSES). tf32x3/CQR2 shown for speed-vs-safety; geqrf(Q) recon is the pessimistic upper bound.
+
+=== b=8 n=2048  [fp32 Gram, shifted CQR3] ===
+  check_implementation : FAIL  factor=- orth=-
+  (skipping timing: EXC _LinAlgError)
+
+=== b=2 n=4096  [fp32 Gram, shifted CQR3] ===
+  check_implementation : FAIL  factor=- orth=-
+  (skipping timing: EXC _LinAlgError)
+
+=== b=8 n=2048  [fp32 Gram, shifted CQR2] ===
+  check_implementation : FAIL  factor=- orth=-
+  (skipping timing: EXC _LinAlgError)
+
+=== b=2 n=4096  [fp32 Gram, shifted CQR2] ===
+  check_implementation : FAIL  factor=- orth=-
+  (skipping timing: EXC _LinAlgError)
+
+=== b=8 n=2048  [tf32x3 Gram, shifted CQR3] ===
+  check_implementation : FAIL  factor=- orth=-
+  (skipping timing: EXC _LinAlgError)
+
+=== b=2 n=4096  [tf32x3 Gram, shifted CQR3] ===
+  check_implementation : FAIL  factor=- orth=-
+  (skipping timing: EXC _LinAlgError)
+
+--- STDERR ---
+
+Stopping app - local entrypoint completed.
+✓ App completed. View run at 
+https://modal.com/apps/raymxnd/main/ap-kyhYadWeQytCsvKjNV25Tw
