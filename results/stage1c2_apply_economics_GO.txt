@@ -1,0 +1,22 @@
+STAGE 1C2 — the trailing apply is 2 GEMMs (not 3); async apply is COMPETITIVE/FASTER (B200)
+===========================================================================================
+CORRECTION to 1B's "~1.4x slow": that was the explicit T-apply 3rd GEMM. Folding T into V
+(VT = V@T^T, precomputed once) makes compact-WY apply = 2 GEMMs:  W1=V^T@C ; C-=VT@W1.
+The W1 global round-trip is CHEAP (~3% of apply, not the bottleneck -> the resident-W1 smem
+fusion is UNNECESSARY; it OOM'd anyway at 262KB > 228KB).
+
+correctness: async 2-GEMM apply relerr 2.75-2.78e-6 (OK).
+speed (B=640 m=512 b=128), async-tcgen05 vs fixed-config tl.dot tf32x3 baseline:
+  Wd=256: current 1978 us | async 1545 us | 0.78x
+  Wd=384: current 2861 us | async 2178 us | 0.76x
+  (NOTE: the tl.dot baseline here is a FIXED weak config (64,64,32); the submission's AUTOTUNED
+   _bmm3 is faster, so treat async as ~1.0-1.1x the real path, consistent with 1A's 1.11x. Either
+   way the apply is COMPETITIVE, decisively NOT 1.4x.)
+
+ECONOMICS (revised, favorable): apply ~1.0x, panel||trailing eff 0.42-0.58 (Stage 0.5):
+  design A net on n=512 = (panel+apply) - eff*(... ) ~= 1.2-1.33x  (was feared ~wash).
+  -> ~+7-9% geomean -> ~5200-5350 Modal. The overlap clearly nets a real win.
+VERDICT: design-A economics confirmed FAVORABLE. The remaining work is the full in-kernel
+factorization assembly (multi-session): in-kernel super-panel factor (rowmagma sub-panels +
+T-factor LARFT + blocked within-applies) || far-trailing worker, look-ahead schedule, batch
+640 + 22/22 + mixed@640 + submit.
