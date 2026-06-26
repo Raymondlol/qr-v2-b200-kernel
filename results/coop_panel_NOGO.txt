@@ -1,0 +1,50 @@
+✓ Initialized. View run at 
+https://modal.com/apps/raymxnd/main/ap-bHWEh51DueIFg95BiZTvAi
+Building image im-O3900AYPtuP00pzA5Wl0fC
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 524.32ms
+
+Built image im-O3900AYPtuP00pzA5Wl0fC in 1.29s
+
+
+Building image im-uQAbZzgpHL3BgE5dM4vQeT
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 2.21s
+
+Built image im-uQAbZzgpHL3BgE5dM4vQeT in 3.43s
+
+
+✓ Created objects.
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/modal_m
+│   icrobench.py
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/experim
+│   ents
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/harness
+└── 🔨 Created function run.
+dev NVIDIA B200 SMs 148
+
+=== n=4096 panel chunk: single-CTA (b=2, 2 CTAs) vs coop (K-CTA/matrix) ===
+  NCOL    K |     single      coop |  speedup | extrap NCOL=4096
+   128   32 |      111.7     825.0 |     0.14 | single~3.6ms coop~26.4ms (geqrf~52ms)
+   128   64 |      111.7     833.2 |     0.13 | single~3.6ms coop~26.7ms (geqrf~52ms)
+   512   32 |      338.8    2838.1 |     0.12 | single~2.7ms coop~22.7ms (geqrf~52ms)
+   512   64 |      338.8    2901.7 |     0.12 | single~2.7ms coop~23.2ms (geqrf~52ms)
+
+COOP PANEL MICROBENCH DONE (GO if coop < single AND coop-extrap < geqrf 52ms)
+
+--- STDERR ---
+
+Stopping app - local entrypoint completed.
+✓ App completed. View run at 
+https://modal.com/apps/raymxnd/main/ap-bHWEh51DueIFg95BiZTvAi
