@@ -1,0 +1,56 @@
+✓ Initialized. View run at 
+https://modal.com/apps/raymxnd/main/ap-SRTeXhuHfYiQUXAuyzPzkN
+Building image im-FFBe1AASe1dP10rjeeq7WN
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 701.22ms
+
+Built image im-FFBe1AASe1dP10rjeeq7WN in 1.59s
+
+
+Building image im-GDELlIe1gAsEMSkt2cMm3Z
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 564.99ms
+
+Built image im-GDELlIe1gAsEMSkt2cMm3Z in 1.49s
+
+
+✓ Created objects.
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/modal_m
+│   icrobench.py
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/experim
+│   ents
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/harness
+└── 🔨 Created function run.
+dev NVIDIA B200 triton 3.6.0
+  B4 M 128 b64 RBLK64: H relerr=1.52e-07 tau relerr=1.74e-07 OK | n_regs=101 spills=0
+  B8 M 256 b64 RBLK64: H relerr=1.08e-07 tau relerr=2.00e-07 OK | n_regs=94 spills=0
+  B8 M 512 b64 RBLK128: H relerr=1.55e-07 tau relerr=1.06e-07 OK | n_regs=105 spills=0
+  B8 M 512 b64 RBLK64: H relerr=1.55e-07 tau relerr=2.07e-07 OK | n_regs=99 spills=0
+  B8 M 512 b64 RBLK32: H relerr=1.57e-07 tau relerr=1.03e-07 OK | n_regs=62 spills=0
+  B8 M 512 b64 RBLK256: H relerr=1.56e-07 tau relerr=1.06e-07 OK | n_regs=104 spills=0
+
+=== SPEED gate (grid=640, M=512, b=64) — smem panel vs register-resident ===
+  register-resident panel: 1110.3 us  (baseline)
+  smem RBLK=256:   2847.5 us  2.56x reg  SLOW
+  smem RBLK=128:   4249.5 us  3.83x reg  SLOW
+  smem RBLK= 64:   5410.0 us  4.87x reg  SLOW
+  smem RBLK= 32:   7486.2 us  6.74x reg  SLOW
+
+SMEM PANEL DONE  (GATE: need regs<=64 AND time<=1.5x reg)
+
+--- STDERR ---
+
+Stopping app - local entrypoint completed.
+✓ App completed. View run at 
+https://modal.com/apps/raymxnd/main/ap-SRTeXhuHfYiQUXAuyzPzkN

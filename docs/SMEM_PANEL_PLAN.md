@@ -1,5 +1,19 @@
 # Research plan: SMEM-resident streaming panel → unlock design-A overlap (~+6%)
 
+> ## ⛔ STAGE A = NO-GO (2026-06-26). DESIGN A IS DEAD IN PRINCIPLE. Do not build Stages B–D below.
+> Built the smem-streaming panel (`experiments/gluon_panel_smem.py`, `results/stageA_smem_panel_NOGO.txt`):
+> bit-faithful (relerr 1e-7), DOES lower registers (RBLK=32 → **62 regs** ≤ the 64 gate), **BUT 2.56–6.74×
+> SLOWER** than the register-resident panel (RBLK=256→2.56×, RBLK=32→6.74×). Structural: a smem-resident
+> tile needs 2 passes/reflector (reduce w → rank-1 update) hitting smem twice; the register panel keeps the
+> tile resident (~free). **The register gate and the ≤1.5× speed gate are MUTUALLY EXCLUSIVE.** So the panel
+> must stay register-resident for speed → it blows the 16-warp budget co-resident with the trailing → design A
+> (in-CTA warp_specialize) is closed. Implementation notes that DID work and are reusable: runtime `range` +
+> 3D-smem `.index(runtime ib)` lowers regs (NOT `gl.static_range`, which unrolls and keeps all blocks live);
+> `.slice(start)` needs a compile-time start. **Only remaining overlap path = design B (inter-CTA/persistent),
+> a major multi-day build for the same bounded ~6%. Best official unchanged: V5 tf32x3 5915µs.**
+>
+> _(Original plan below — Stages B–D are now moot for design A; kept for the design-B fallback reasoning.)_
+
 > **Branch `gluon-smem-panel`** (from the de-risk session commit). Read `CLAUDE.md` + the
 > `docs/HANDOVER_NEXT_SESSION.md` banner + `[[qr-v2-gluon-warp-specialize]]` memory FIRST —
 > this plan assumes the full Phase 0/1/1.5 diagnosis below.
