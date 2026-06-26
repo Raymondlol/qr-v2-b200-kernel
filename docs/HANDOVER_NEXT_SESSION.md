@@ -1,5 +1,10 @@
 # HANDOVER → next session: the research-grade swing (Gluon warp-spec panel/trailing OVERLAP)
 
+> **▶▶ NEXT WORK = `docs/SMEM_PANEL_PLAN.md` on branch `gluon-smem-panel`.** The overlap direction is
+> de-risked down to ONE remaining step: a SMEM-resident streaming panel (frees registers so the
+> 16-warp panel‖trailing config fits). Read the plan's Stage A gate first. This doc below is the full
+> Phase 0/1/1.5 diagnosis the plan rests on.
+
 **Read this first, then `CLAUDE.md` + `docs/FP8_SESSION_PROGRESS.md` (the strategic map) + `docs/DEAD_ENDS.md` (do-not-retry).**
 
 > ## ✅ PHASE 0 + PHASE 1 = DONE, BOTH GO (2026-06-26). Design A chosen (flips the old "lean B").
