@@ -1,0 +1,60 @@
+STAGE 0 (the crux) — MAGMA-style register-FILE panel — RESULT (B200, triton 3.6.0)
+====================================================================================
+Question: does a panel exist that is BOTH fast (~register-resident gluon_panel.py)
+AND low-register enough to co-reside with the 8w/128r async tcgen05 trailing worker?
+
+KEY: the default_blocked_layout register panel SPILLS CATASTROPHICALLY. The MAGMA row-
+distributed layout (each thread owns COMPLETE rows -> in-place rank-1 update, no transient
+full-tile temporary) eliminates the spills, and narrowing ib drops the register count into
+the co-residable range.
+
+n_regs / spills at M=512 (the binding case):
+  default b=64 nw=8 (baseline) : n_regs=255 spills=310   <-- catastrophic spill
+  rowmagma b=64 nw=8           : n_regs=255 spills=16
+  rowmagma b=32 nw=8           : n_regs=160 spills=0
+  rowmagma b=16 nw=8           : n_regs=108 spills=0      <-- CO-RESIDABLE candidate
+  rowmagma b=64 nw=16          : n_regs=128 spills=22     (16 warps = not co-residable)
+  rowmagma b=32 nw16           : n_regs=106 spills=0      (16 warps = not co-residable)
+All variants bit-faithful vs panel_ref (H/tau relerr ~1e-7) at M in {512,384,256,128}.
+
+SPEED (grid=640, M=512; norm = per-call x 64/b = time to factor 64 columns):
+  default b=64 nw=8 (BASELINE) : per-call 1110 us  norm 1110  1.00x (spill-bound)
+  rowmagma b=16 nw=8           : per-call  112 us  norm  448   0.40x  <= FAST
+  rowmagma b=32 nw=8           : per-call  440 us  norm  881   0.79x
+  rowmagma b=64 nw=8           : per-call 1694 us  norm 1694   1.53x  (still spills 16)
+
+VERDICT: provisional GO. The handover's "panel can't co-reside (register panel blows
+the 16-warp/64K budget; smem panel too slow)" is OVERTURNED by a THIRD option it never
+tested: MAGMA row-distributed layout + NARROW ib=16 = 108 regs, 0 spills, fast.
+Budget check: panel 8w@108 (27648 regs) + worker 8w@128 (32768) = 60416 <= 65536 (64K) -> FITS.
+The literal "<=64 regs" target is not hit at M=512 (108), but the REAL constraint
+(R_panel + R_worker <= 256/thread-pair) IS met with headroom.
+NEXT (Stage 0.5, cheap): directly compile gl.warp_specialize(rowmagma_b16 || async worker)
+to confirm co-residence (no over-subscription / spills) AND measure overlap eff.
+
+====================================================================================
+STAGE 0.5 — co-residence COMPILE + overlap de-risk (gl.warp_specialize(rowmagma_b16 || async worker))
+====================================================================================
+The make-or-break: swap the 255-reg/310-spill default panel (which made design-A REGRESS,
+WS 1.2-2.7x SLOWER per the handover) for the rowmagma ib=16 panel and run warp_specialize.
+
+Co-residence (M=384, ib=16):
+  panel-only : n_regs=108 spills=0   panel relerr=1.97e-07            OK
+  WS fused   : n_regs=128 spills=60-114  panel 1.97e-07 / trail 8.2e-4  OK  <- COMPILES + RUNS
+  -> the WS kernel co-resides and is CORRECT (handover's "panel can't co-reside" overturned).
+     It still spills 60-114 (worker reg-starved at 128; tunable) -> headroom remains.
+
+Overlap (panel(8w) || async tcgen05 trailing(worker)); eff=(seq-ws)/(seq-max):
+   M=512 wk=8/128:  SEQ 332.8  WS 278.5  spd 1.20  eff 0.42
+   M=512 wk=8/160:  SEQ 332.9  WS 281.9  spd 1.18  eff 0.39
+   M=256 wk=8/160:  SEQ 307.9  WS 243.7  spd 1.26  eff 0.58   <- crosses 0.5
+   wk=4/128     :  NEGATIVE (worker starved, spills 328+)
+
+VERDICT: GO. design-A flips from REGRESSING (default panel, eff<0) to a POSITIVE
+1.18-1.26x overlap (eff 0.42-0.58) with the rowmagma ib=16 panel. The crux ("a panel
+that is BOTH fast AND co-residable") is SOLVED. This REOPENS design A, which the
+2026-06-26 handover had closed as fully dead.
+Caveats (Stage-1 work): (a) eff borderline 0.42 at the dominant M=512; (b) WS still
+spills 60-114 (worker regs/npass/tile tuning should recover it); (c) this is ONE
+panel||trailing sub-step, not the full look-ahead factorization (gram/solve fold,
+shape-route, mixed@640 margin, real submission still pending).
