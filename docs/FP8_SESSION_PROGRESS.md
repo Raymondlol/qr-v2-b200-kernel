@@ -7,7 +7,9 @@ This is the complete record of the session; the checkpoint protocol (end) is pre
 
 ## 1. Headline outcome
 
-**SHIPPED: fp16x3 trailing → +3.6% geomean.** The user's fp8/fp4 thesis was tested to the floor:
+> **⚠️ OFFICIAL UPDATE (2026-06-26): fp16x3 was a WASH on official and was REVERTED.** submissionV6 (fp16x3) = **5997µs ≈ V5 tf32x3 5915** (within noise; the Modal +3.6% did NOT transfer — fp16-fp32acc = tf32 rate, the Modal gain was a codegen artifact). `submission.py` is back to V5 tf32x3 (best official = 5915). The numbers below are the (real) Modal lab measurements; treat the "+3.6% win" framing as Modal-only. The session's lasting value = the FINDINGS (fp8 speed-dead, the solve-tf32 floor artifact + solve-fix robustness option, the strategic map), not a speed win. See [[qr-v2-testing-setup]] for the calibration lesson.
+
+**Modal lab: fp16x3 trailing → +3.6% (did NOT transfer to official, see banner above).** The user's fp8/fp4 thesis was tested to the floor:
 **accuracy-VIABLE, speed-DEAD.**
 
 | Result | Verdict |
