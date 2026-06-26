@@ -1,0 +1,28 @@
+STAGE 1B — compact-WY trailing APPLY via async tcgen05 (B200)
+============================================================
+Generalized the 1A GEMM to K-loop (register accumulator across BK chunks; cross-chunk TMEM
+use_acc was BROKEN -> garbage 0.875; reg-accumulate per-chunk full-product = correct) + NTERM.
+
+GEMM precision (relerr vs fp64):
+  K=512 NTERM=3: 2.13e-06   K=128 NTERM=3: 2.45e-06
+  NTERM=4 == NTERM=3 (the 4th term Al@Bl is negligible; the ~19-20 bit limit is the SPLIT,
+  not the term count -> naive hi/lo loses ~3 bits of lo to tf32 truncation).
+  Triton's input_precision="tf32x3" = ~2e-7 (~22 bit). Gap = ~3 bits.
+  NOTE: likely ABSORBED by the solve->fp32 robustness fix (margin 800x), so probably not
+  binding for mixed@640 -- to be re-checked at the margin gate.
+
+compact-WY apply  C -= V@(T^T@(V^T@C))  (3 chained async GEMMs), relerr vs torch:
+  m512 b128 Wd384: 2.99e-06   m256 b128 Wd256: 3.64e-06   (OK, <1e-4 -> math CORRECT)
+
+Speed (B=640 m=512 b=128 Wd=384 = first super-panel fat apply):
+  apply_async (3 GEMMs, global round-trips): NTERM=3 2402 us / NTERM=4 2541 us
+  current path apply ~= 2x _bmm3 (835) + solve ~= 1670+solve us
+  -> the async apply is ~1.4x SLOWER standalone (extra T-apply GEMM W2 vs cuSOLVER solve;
+     async BM=64 forced by smem; W1/W2 global round-trips).
+
+ECONOMICS CONCERN (the gate): design A overlaps panel(k+1) || trailing-apply(k). With the
+apply ~1.4x slower AND eff~0.5 (Stage 0.5), the overlap saving (~0.5*min(panel,apply)) is
+roughly CANCELLED by the apply slowdown -> design A risks being a WASH on n=512 unless the
+apply is FUSED into the worker (kill the W1/W2 global round-trips) to get back near ~1.0x.
+That fused large-K async GEMM chain (intermediates resident) is the next multi-day build.
+Foundations all GO; net-win is now the open question, hinging on the fused-apply efficiency.
