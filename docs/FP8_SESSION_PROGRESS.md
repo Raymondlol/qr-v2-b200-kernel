@@ -14,7 +14,7 @@ This is the complete record of the session; the checkpoint protocol (end) is pre
 
 | Result | Verdict |
 |---|---|
-| **fp16x3 trailing** (replaces fused tf32x3) | **WIN, shipped to `submission.py`** — +3.6% lab geomean (6163.8 → 5947.3), 22/22, mixed@640 margin **1.83x = identical** to the prior tf32x3 submission (no added DQ risk). Commit `f981cce`, tag `fp16x3-win`. |
+| **fp16x3 trailing** (replaces fused tf32x3) | **OFFICIAL WASH → REVERTED.** Modal lab +3.6% (6163.8 → 5947.3), 22/22, m1.83 — BUT official submissionV6 = 5997 ≈ V5 5915 (the +3.6% did not transfer; fp16-fp32acc = tf32 rate). `submission.py` back to V5 tf32x3. |
 | fp8/fp4 trailing | **accuracy-viable** (fp8 e4m3 6-dot Ozaki = m10.8 SAFE) but **speed-dead** (K-poor batched shapes negate fp8's 4x; fused fp8-6dot only 14% faster than tf32x3, 3.7x slower realistically). |
 | solve→fp32 fix | The mixed@640 "1.9x floor" was a **tf32-solve artifact**, not a trailing wall. Fix = +2.4% AND margin 800x (`cand_fp16x3_solvefix.py`, documented safe alt — not shipped). |
 
@@ -141,15 +141,14 @@ need (bounded, mid-board per `HOW_LEADERS_ARE_FAST.md`).
 
 ## 8. Current state, deployable variants & experiment index
 
-**Current state:** `submission.py` = **fp16x3** (+3.6%, m1.83, 22/22, clean of `stream`/`graph`
-substrings) — **READY TO SUBMIT** (est ~5700µs official). All work committed on branch
-`fp8-fp4-attack` (commits `f854634..dc135a3`, tag `fp16x3-win`).
+**Current state (CORRECTED after official):** `submission.py` = **V5 tf32x3** (reverted) = the confirmed-best official **5915µs**. fp16x3 (submissionV6) was an **official WASH** (5997 ≈ 5915, Modal +3.6% did not transfer) → reverted. No pending speed win.
 
-**Two deployable variants:**
-| Variant | File | geomean | mixed@640 margin | Pick when |
-|---|---|---|---|---|
-| **fp16x3 (shipped)** | `submission.py` | **+3.6%** | 1.83x (= baseline) | max speed, no added DQ risk |
-| fp16x3 + solve-fix | `experiments/cand_fp16x3_solvefix.py` | +2.4% | **800x** | reseed-DQ safety > last 1.2% of speed |
+**Variants (none is a confirmed speed win; both kept as artifacts):**
+| Variant | File | Modal geomean | official | mixed@640 margin | Status |
+|---|---|---|---|---|---|
+| tf32x3 (V5) | `submission.py` | baseline | **5915 (best)** | 1.83x | SHIPPED — current |
+| fp16x3 | `experiments/cand_fp16x3.py` | Modal +3.6% | **5997 (WASH)** | 1.83x | tried, REVERTED |
+| (any) + solve-fix | `experiments/cand_fp16x3_solvefix.py` | −~1% | — | **800x** | robustness option (apply on V5); submit only for reseed-DQ insurance |
 
 **Experiment files created/used this session** (`experiments/`):
 - `microbench_attrib.py` — proves the tf32-SOLVE is the floor culprit (attribution A/B/C/D).
@@ -160,7 +159,7 @@ substrings) — **READY TO SUBMIT** (est ~5700µs official). All work committed 
 - `microbench_fp8_decisive.py` — accuracy (real fp32 panel) + part-B throughput anchors.
 - `microbench_mxfp8_vs_fp8.py` — mxfp8 `dot_scaled` 1.16–1.29x slower than plain fp8.
 - `microbench_1x_reseed.py` — 1×TF32 worst-of-640 sfr→19.7 across 12 seeds (reseed-DQ).
-- `cand_fp16x3.py` — the shipped fp16x3 trailing candidate (→ `submission.py`).
+- `cand_fp16x3.py` — the fp16x3 trailing candidate (tried → official wash → REVERTED; `submission.py` is V5 tf32x3).
 - `cand_fp16x3_tune.py` — autotune variant of the fp16x3 trailing.
 - `cand_fp16x3_solvefix.py` — fp16x3 + solve→fp32 (safe alt, +2.4%, margin 800x).
 - `cand_fp16x3_tsolvecol.py` — fp16x3 + Codex tsolve-col port (correct 22/22, m98x, but 62% slower).
