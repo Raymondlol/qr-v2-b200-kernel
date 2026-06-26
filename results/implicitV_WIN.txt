@@ -34,3 +34,19 @@ WHY IT WINS (mechanism, corrected from GPT's "2x"):
 STATUS: submission.py UPDATED to implicit-V. DEPLOYABLE (pure Triton, no Gluon). LIKELY transfers
 officially (real traffic/launch reduction, NOT a codegen artifact like fp16x3) but MUST confirm via
 a real gpumode submission (Modal ~4% optimistic; expect official V5 5915 -> ~5700-5740us).
+
+====================================================================================
+*** OFFICIAL UPDATE: REVERSED — implicit-V REGRESSED officially -> REVERTED to V5 ***
+====================================================================================
+gpumode official (SubmissionV7 = implicit-V), 12 ranked cases geomean = ~6145us.
+  vs V5 official 5915us  ->  V7 is +3.9% SLOWER (not the Modal +4% faster).
+Per-case official: n512 dense 13.1ms, n512 mixed 13.2, n1024 7.64, n2048 18.5, n4096 52.2,
+  n176 461us, n352 1479us (all HIGHER than the Modal lab figures + net geomean worse than V5).
+The Modal lab +4.0% DID NOT TRANSFER and REVERSED. Same trap as fp16x3 (submissionV6:
+Modal +3.6% -> official wash). Likely mechanism: implicit-V trades the torch.tril HBM write
+for per-load triangular-mask ALU (tl.where x2 in the gram, computed on every V element, paid 3x
+across gram/W/update); Modal's toolchain/HW hid that ALU, official did not. Also the 3 new
+per-shape-autotuned kernels (_iv_*) are likely less optimal than the single shared, battle-tested
+_bmm_x3_kernel that the explicit path reuses.
+ACTION: submission.py REVERTED to byte-identical confirmed V5 (5915us). V7 kept as artifact only.
+LESSON (re-confirmed): NEVER trust a sub-5% Modal geomean delta; gate on a real gpumode submission.
