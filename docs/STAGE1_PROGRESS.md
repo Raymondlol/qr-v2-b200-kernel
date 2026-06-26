@@ -1,8 +1,14 @@
-# Stage 1 (design-A fused factorization) — PROGRESS + BUILD PLAN
+# Stage 1 (design-A fused factorization) — PROGRESS + FINAL VERDICT
 
-> Branch `gluon-regfile-panel`. Continues after Stage 0 reopened design A (`docs/DEAD_ENDS.md`
-> top banner). submission.py UNCHANGED = V5 tf32x3 5915µs. This doc = the validated foundations,
-> the (favorable) economics, and the precise remaining build, so the full assembly can proceed.
+> Branch `gluon-regfile-panel`. Continues after Stage 0 reopened design A. submission.py UNCHANGED
+> = V5 tf32x3 5915µs. **FINAL VERDICT (Stage 1E): the overlap CORE works (proven, eff 0.45/1.13×) but
+> the end-to-end net is structurally bounded to ~+2-3% geomean by the ib=16 co-residence penalty,
+> and that likely washes officially → SHIP V5.** The lab gate `cand_ib16` (ib=16 forced, no overlap)
+> = **0.938× (6.6% slower)**: ib=16 is a disaster for small n (n352 1364→2900µs); n=512-only the
+> panel penalty is ~0.6% but the overlap then nets only ~+2-3% (within-applies/gram/solve stay
+> serial). In-CTA design A can't use the faster ib=64 panel AND co-reside. Only design B (inter-CTA,
+> no register sharing → ib=64, no penalty) escapes the bound = a multi-week build. The validated
+> foundations + proven overlap core below are the durable assets for that design-B effort.
 
 ## What Stage 1 has VALIDATED (all GO, committed, each cheaply gated on B200)
 

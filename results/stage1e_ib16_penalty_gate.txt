@@ -1,0 +1,24 @@
+STAGE 1E (decisive gate) — the ib=16 co-residable-panel PENALTY (lab compare, same B200 container)
+==================================================================================================
+The co-residable panel REQUIRES ib=16 (ib=32 = 160 regs, doesn't fit with a 128-reg worker).
+But ib=16 has 8 sub-panels + 7 within-applies per NB=128 super-panel vs ib=64's 2+1. Isolate that
+penalty (NO overlap) by forcing _blocking(n<=512) -> (128,16) and lab-comparing to V5.
+
+  submission.py (V5)            geomean 5688.8  (base)
+  cand_ib16 (ib=16 all n<=512)  geomean 6063.3  0.938x  (6.6% SLOWER)
+  killer: b40 n352 dense 1364 -> 2900us (+113%)  <- ib=16 is a DISASTER for small n (launch-bound)
+  BUT the n=512 cases: only ~+0.6% (12230->12286 dense, 12329->12414 mixed, 12387->12479 rankdef)
+
+VERDICT: ib=16 must be shape-routed to n=512 ONLY (n<512 keeps ib=64). Then the panel penalty is
+small (~0.6%). The design-A overlap (Stage 1D: 1.13x, eff 0.45 on panel+far-trailing) would then
+net a SMALL win on the 4 n=512 cases. But the realistic ceiling is ~+2-3% geomean because:
+  - within-applies / gram / solve stay SERIAL (only the panel reductions hide behind far-trailing);
+  - the wiring adds serial glue (VT_k = V_k@T_k^T precompute, look-ahead split);
+  - eff is capped at 0.45 by worker register spilling (182).
+A ~+2-3% Modal gain very likely WASHES on official HW (the fp16x3 lesson: Modal +3.6% -> official 0).
+
+DECISION: NOT worth the intricate, bug-prone multi-session _factor_custom wiring for a bounded
+~+2-3% that likely washes officially. In-CTA design A is STRUCTURALLY bounded by the ib=16
+co-residence penalty. The only way to use ib=64 (no penalty) AND overlap = design B (inter-CTA,
+no register sharing) = a multi-week build. sub-5000 (~12% over V5) is out of reach via design A.
+SHIP V5 (5915us official). The design-A core + foundations are documented + committed for design B.
