@@ -1,0 +1,52 @@
+✓ Initialized. View run at 
+https://modal.com/apps/raymxnd/main/ap-kukU1AgK4PuPpt2OvMZYIt
+Building image im-A6CdVhEYLYNY6Fop5OVVZx
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 440.80ms
+
+Built image im-A6CdVhEYLYNY6Fop5OVVZx in 1.27s
+
+
+Building image im-fUBOYT8moaGKSDriEf1pMP
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 730.40ms
+
+Built image im-fUBOYT8moaGKSDriEf1pMP in 1.54s
+
+
+✓ Created objects.
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/modal_m
+│   icrobench.py
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/experim
+│   ents
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/harness
+└── 🔨 Created function run.
+dev NVIDIA B200 triton 3.6.0 SMs 148
+  N_CTA=128 ROUNDS=  8: OK  (20/20 trials, sums exact = barrier+ordering correct)
+  N_CTA=132 ROUNDS= 16: OK  (20/20 trials, sums exact = barrier+ordering correct)
+  N_CTA=148 ROUNDS= 32: OK  (20/20 trials, sums exact = barrier+ordering correct)
+  N_CTA= 64 ROUNDS= 64: OK  (20/20 trials, sums exact = barrier+ordering correct)
+
+=== per-barrier OVERHEAD (only barriers, no work) ===
+  N_CTA= 64: 2516.83 ns/barrier  (2000 rounds = 5034us)  -> ~4096 barriers = 10309us (vs geqrf n4096 ~52000us)
+  N_CTA=128: 2591.49 ns/barrier  (2000 rounds = 5183us)  -> ~4096 barriers = 10615us (vs geqrf n4096 ~52000us)
+  N_CTA=148: 2597.87 ns/barrier  (2000 rounds = 5196us)  -> ~4096 barriers = 10641us (vs geqrf n4096 ~52000us)
+
+GRID BARRIER TEST DONE
+
+--- STDERR ---
+
+Stopping app - local entrypoint completed.
+✓ App completed. View run at 
+https://modal.com/apps/raymxnd/main/ap-kukU1AgK4PuPpt2OvMZYIt
