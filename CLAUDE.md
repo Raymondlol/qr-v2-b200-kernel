@@ -1,5 +1,7 @@
 # CLAUDE.md — qr_v2 batched-QR kernel (GPU MODE competition, B200)
 
+> **▶ NEXT SESSION: open `docs/HANDOVER_NEXT_SESSION.md` FIRST** — the research-grade plan (Gluon warp-spec panel/trailing OVERLAP) with a staged GO/NO-GO TODO. The user has opted to invest in research-grade engineering.
+
 Read this first, then `README.md`. The `docs/` files are the full handoff.
 
 ## What this is

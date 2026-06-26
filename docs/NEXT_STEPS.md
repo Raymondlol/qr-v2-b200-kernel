@@ -1,5 +1,7 @@
 # Next steps — the evidence-based path forward (updated after the full investigation)
 
+> **▶ THE PLAN for the next (research-grade) session is `docs/HANDOVER_NEXT_SESSION.md`** — Gluon warp-specialized panel/trailing OVERLAP, staged with GO/NO-GO gates (Phase 0 primitive co-host → Phase 1 overlap-vs-trailing-penalty → Phase 2 build → Phase 3 submit). This file (below) is the broader ranked-levers reference.
+
 ## Immediate
 **CURRENT BEST = V5 tf32x3 (official 5915µs); `submission.py` is reverted to it.** FP16x3 was tried (submissionV6) — Modal said +3.6% but **OFFICIAL = 5997 ≈ V5 5915 = WASH** (fp16-fp32acc = tf32 rate; the Modal gain was a codegen artifact that did NOT transfer). So there is NO pending speed win to submit. The deployable, confirmed-valuable option from this session is the **solve→fp32 robustness fix** (apply on V5 tf32x3): mixed@640 margin ~1.9×→~800× at ~+1% — worth a submission ONLY if you want reseed-DQ insurance over ~1% speed. `grep -niE "stream|graph" submission.py` → empty (confirmed). LESSON ([[qr-v2-testing-setup]]): gate any sub-5% Modal/codegen "win" on a real submission before trusting it. Run the lab harness for any new candidate (`docs/METHODOLOGY.md`).
 
