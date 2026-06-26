@@ -7,7 +7,7 @@ import torch
 sys.path.insert(0, "/work"); sys.path.insert(0, "/work/harness")
 import reference
 
-CAND = "cand_fp16x3"
+CAND = "cand_fp16x3_tsolvecol"
 mod = __import__(CAND)
 torch.set_grad_enabled(False)
 
