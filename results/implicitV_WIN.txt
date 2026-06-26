@@ -1,0 +1,36 @@
+IMPLICIT-V DLARFB apply (V never materialized) — DEPLOYABLE WIN (B200 lab, 2026-06-26)
+======================================================================================
+Origin: a GPT suggestion to rewrite _apply_block from "explicit V=tril(P) + Gram + wide
+solve + generic torch ops" into "implicit-V DLARFB". MOST of that plan was wrong/dead
+(Checkpoint A = solve->small-inverse+GEMM = cand_tsolve, already measured DEAD; the "2x"
+claim was a magnitude error — implicit-V saves V-MATERIALIZATION traffic, not GEMM compute).
+But the ONE untested nugget — load V implicitly from H with a triangular mask, killing the
+torch.tril materialization + glue — WINS.
+
+Implementation (n<=512 / tf32x3 path only; n>=1024 keeps the explicit 1xTF32 path):
+  3 implicit-V tf32x3 Triton kernels replace tril + _gram/_mm/_mm_sub:
+    _iv_VtV: G = V^T V   (both operands masked from H)
+    _iv_VtC: W = V^T C
+    _iv_VYsub: C -= V Y  (in-place, restore_value=['Cp'])
+  V[r,i] = 0 (r<i) / 1 (r==i) / H[col+r,col+i] (r>i), computed in-kernel. No V tensor.
+  Precision IDENTICAL to V5 (same V values, same tf32x3, same tf32 solve) -> mixed@640
+  margin preserved by construction.
+
+Lab compare (same B200 container, 12 interleaved reps), baseline = V5 submission.py:
+  cand_implicitV   geomean 1.040x FASTER   22/22 correct   NO regressions
+  per-case (all significant >2se WINS):
+    n176 dense   628 -> 543  (-13.5%)   <- small-n = launch-bound, huge relative win
+    n352 dense  1548 ->1363  (-12%)
+    n512 dense 12249 ->11900 (-2.8%)    n512 mixed   -3.0%   n512 rankdef -2.8%  n512 clustered -2.9%
+    n32  dense   -0.9%
+    (n1024/n2048 showed -1.5..3.6% but those paths are UNCHANGED -> likely container noise, not real)
+  Conservative (n<=512 real wins only): ~+3.2% geomean. Optimistic (all): +4.0%.
+
+WHY IT WINS (mechanism, corrected from GPT's "2x"):
+  - small n (176/352): removes torch.tril + several op launches -> launch-bound cases win big.
+  - n=512 batch 640: the apply GEMMs are compute-bound (already tf32x3-optimal), so the win is
+    the eliminated standalone tril materialization (memory-bound op) -> ~3%.
+
+STATUS: submission.py UPDATED to implicit-V. DEPLOYABLE (pure Triton, no Gluon). LIKELY transfers
+officially (real traffic/launch reduction, NOT a codegen artifact like fp16x3) but MUST confirm via
+a real gpumode submission (Modal ~4% optimistic; expect official V5 5915 -> ~5700-5740us).
