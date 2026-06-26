@@ -1,12 +1,3 @@
-# ============================ SubmissionV7 (implicit-V DLARFB) ============================
-# V7 = V5 tf32x3 + IMPLICIT-V apply: _apply_block (n<=512) loads V from H with a triangular
-# mask in 3 tf32x3 kernels (_iv_VtV gram, _iv_VtC, _iv_VYsub in-place) -> V never materialized
-# (kills torch.tril + glue). Lab vs V5 (same container): geomean 1.040x FASTER, 22/22, no
-# regressions (n176 -13.5%, n352 -12%, n512 ~-2.9%). Precision identical to V5 (same V values /
-# tf32x3 / tf32 solve) -> mixed@640 margin preserved by construction. n>=1024 keeps V5's explicit
-# 1xTF32 path. Modal est ~5700-5770us official (PENDING gpumode confirm). Prior versions kept:
-# milestones/submissionV5_tf32x3_official5915us.py; V6 fp16x3 = official WASH (reverted, tag fp16x3-win).
-# =========================================================================================
 # Phase 1a proxy: ib=64 for n=512 (fused-panel route, fewer narrow updates).
 # qr_v2 submission: batched compact-Householder QR for B200. (n=2048 routed to
 # custom one-CTA panel + warps; n=4096 to cuSOLVER.) Validated 22/22.
@@ -258,117 +249,16 @@ if _HAS_TRITON:
         tl.store(ptr, tile, mask=tmask)
 
 
-# ----------------------------- IMPLICIT-V apply (DLARFB; V never materialized) -----
-# V is the unit-lower-trapezoidal panel: V[r,i] = 0 (r<i), 1 (r==i), H[col+r,col+i] (r>i).
-# Load V on-the-fly from H with a triangular mask in each GEMM -> kill the torch.tril
-# materialization (a standalone memory-bound op) + the glue. tf32x3 throughout.
-if _HAS_TRITON:
-    _IV_CFGS = [
-        triton.Config({'BM': 64, 'BN': 64, 'BK': 32}, num_warps=4, num_stages=3),
-        triton.Config({'BM': 128, 'BN': 64, 'BK': 32}, num_warps=4, num_stages=3),
-        triton.Config({'BM': 64, 'BN': 128, 'BK': 32}, num_warps=4, num_stages=3),
-        triton.Config({'BM': 128, 'BN': 128, 'BK': 32}, num_warps=8, num_stages=3),
-        triton.Config({'BM': 32, 'BN': 64, 'BK': 64}, num_warps=4, num_stages=3),
-    ]
-
-    @triton.autotune(configs=_IV_CFGS, key=['m', 'Wd'])
-    @triton.jit
-    def _iv_VtC(Hp, Wp, shb, shr, shc, swb, swi, swj, col, c0, m, b, Wd,
-                BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
-        # W[i,j] = sum_r V[r,i] * C[r,j];  C = H[:,col:,c0:].
-        pb = tl.program_id(0); pi = tl.program_id(1); pj = tl.program_id(2)
-        ri = pi * BM + tl.arange(0, BM); rj = pj * BN + tl.arange(0, BN); rk = tl.arange(0, BK)
-        Hb = Hp + pb * shb
-        acc = tl.zeros((BM, BN), tl.float32)
-        for k0 in range(0, m, BK):
-            r = k0 + rk
-            ah = tl.load(Hb + (col + r[None, :]) * shr + (col + ri[:, None]) * shc,
-                         mask=(r[None, :] < m) & (ri[:, None] < b), other=0.0)
-            a = tl.where(r[None, :] < ri[:, None], 0.0,
-                         tl.where(r[None, :] == ri[:, None], 1.0, ah))
-            bb = tl.load(Hb + (col + r[:, None]) * shr + (c0 + rj[None, :]) * shc,
-                         mask=(r[:, None] < m) & (rj[None, :] < Wd), other=0.0)
-            acc += tl.dot(a, bb, input_precision="tf32x3")
-        tl.store(Wp + pb * swb + ri[:, None] * swi + rj[None, :] * swj, acc,
-                 mask=(ri[:, None] < b) & (rj[None, :] < Wd))
-
-    @triton.autotune(configs=_IV_CFGS, key=['m', 'b'])
-    @triton.jit
-    def _iv_VtV(Hp, Gp, shb, shr, shc, sgb, sgi, sgj, col, m, b,
-                BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
-        # G[i,j] = sum_r V[r,i] * V[r,j]  (both operands implicit).
-        pb = tl.program_id(0); pi = tl.program_id(1); pj = tl.program_id(2)
-        ri = pi * BM + tl.arange(0, BM); rj = pj * BN + tl.arange(0, BN); rk = tl.arange(0, BK)
-        Hb = Hp + pb * shb
-        acc = tl.zeros((BM, BN), tl.float32)
-        for k0 in range(0, m, BK):
-            r = k0 + rk
-            ah = tl.load(Hb + (col + r[None, :]) * shr + (col + ri[:, None]) * shc,
-                         mask=(r[None, :] < m) & (ri[:, None] < b), other=0.0)
-            a = tl.where(r[None, :] < ri[:, None], 0.0,
-                         tl.where(r[None, :] == ri[:, None], 1.0, ah))
-            bh = tl.load(Hb + (col + r[:, None]) * shr + (col + rj[None, :]) * shc,
-                         mask=(r[:, None] < m) & (rj[None, :] < b), other=0.0)
-            bv = tl.where(r[:, None] < rj[None, :], 0.0,
-                          tl.where(r[:, None] == rj[None, :], 1.0, bh))
-            acc += tl.dot(a, bv, input_precision="tf32x3")
-        tl.store(Gp + pb * sgb + ri[:, None] * sgi + rj[None, :] * sgj, acc,
-                 mask=(ri[:, None] < b) & (rj[None, :] < b))
-
-    @triton.autotune(configs=_IV_CFGS, key=['m', 'Wd'], restore_value=['Cp'])
-    @triton.jit
-    def _iv_VYsub(Hp, Cp, Yp, shb, shr, shc, scb, scr, scc, syb, syi, syj, col, m, b, Wd,
-                  BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
-        # C[r,j] -= sum_i V[r,i] * Y[i,j], in place.  Cp = H[:,col:,c0:] view.
-        pb = tl.program_id(0); pr = tl.program_id(1); pj = tl.program_id(2)
-        rr = pr * BM + tl.arange(0, BM); rj = pj * BN + tl.arange(0, BN); rk = tl.arange(0, BK)
-        Hb = Hp + pb * shb
-        acc = tl.zeros((BM, BN), tl.float32)
-        for k0 in range(0, b, BK):
-            i = k0 + rk
-            ah = tl.load(Hb + (col + rr[:, None]) * shr + (col + i[None, :]) * shc,
-                         mask=(rr[:, None] < m) & (i[None, :] < b), other=0.0)
-            a = tl.where(rr[:, None] < i[None, :], 0.0,
-                         tl.where(rr[:, None] == i[None, :], 1.0, ah))
-            bb = tl.load(Yp + pb * syb + i[:, None] * syi + rj[None, :] * syj,
-                         mask=(i[:, None] < b) & (rj[None, :] < Wd), other=0.0)
-            acc += tl.dot(a, bb, input_precision="tf32x3")
-        cptr = Cp + pb * scb + rr[:, None] * scr + rj[None, :] * scc
-        cmask = (rr[:, None] < m) & (rj[None, :] < Wd)
-        tl.store(cptr, tl.load(cptr, mask=cmask, other=0.0) - acc, mask=cmask)
-
-
-def _apply_block_implicit(H, col, b, tau, c0, c1):
-    B, N, _ = H.shape
-    m = N - col; Wd = c1 - c0
-    shb, shr, shc = H.stride()
-    G = torch.empty((B, b, b), device=H.device, dtype=torch.float32)
-    _iv_VtV[lambda M: (B, triton.cdiv(b, M['BM']), triton.cdiv(b, M['BN']))](
-        H, G, shb, shr, shc, *G.stride(), col, m, b)
-    tau_blk = tau[:, col:col + b]
-    nz = tau_blk != 0
-    inv_tau = torch.where(nz, 1.0 / torch.where(nz, tau_blk, torch.ones_like(tau_blk)),
-                          torch.full_like(tau_blk, 1e30))
-    Mm = torch.triu(G, diagonal=1)
-    Mm.diagonal(dim1=-2, dim2=-1).copy_(inv_tau)
-    W = torch.empty((B, b, Wd), device=H.device, dtype=torch.float32)
-    _iv_VtC[lambda M: (B, triton.cdiv(b, M['BM']), triton.cdiv(Wd, M['BN']))](
-        H, W, shb, shr, shc, *W.stride(), col, c0, m, b, Wd)
-    Y = torch.linalg.solve_triangular(Mm.transpose(1, 2), W, upper=False)
-    C = H[:, col:, c0:c1]
-    _iv_VYsub[lambda M: (B, triton.cdiv(m, M['BM']), triton.cdiv(Wd, M['BN']))](
-        H, C, Y, shb, shr, shc, *C.stride(), *Y.stride(), col, m, b, Wd)
-
-
 # ----------------------------- block reflector apply -----------------------------
 def _apply_block(H, col, b, tau, c0, c1):
-    # n<=512 (tf32x3) -> IMPLICIT-V DLARFB (no torch.tril). n>=1024 -> explicit (1xTF32).
+    # Apply the width-b block reflector stored at columns [col:col+b], rows [col:],
+    # to columns [c0:c1] (rows [col:]). Compact-WY with T via one triangular solve.
     if c1 <= c0:
         return
-    if _BIG_X3 and _HAS_TRITON and H.is_cuda:
-        _apply_block_implicit(H, col, b, tau, c0, c1)
-        return
     P = H[:, col:, col:col + b]
+    # glue trimmed: tril() already returns a fresh tensor (the old .clone() was a
+    # redundant full m*b copy = a Memcpy DtoD per apply); set the unit diagonal via a
+    # diagonal view instead of arange + fancy-index.
     V = torch.tril(P[:, :, :b], diagonal=-1)
     V.diagonal(dim1=-2, dim2=-1).fill_(1.0)
     tau_blk = tau[:, col:col + b]
