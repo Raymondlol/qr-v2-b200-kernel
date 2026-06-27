@@ -1,4 +1,4 @@
-# === V5 + glue fusion (M-builder + V-builder + M^T-no-transpose) — Modal ~+7.4% vs V5, branch profiling-deepdive ===
+# === V5 + FUSED M-BUILDER (glue launch+traffic cut, bit-identical) — Modal +5.2%, branch profiling-deepdive ===
 # Phase 1a proxy: ib=64 for n=512 (fused-panel route, fewer narrow updates).
 # qr_v2 submission: batched compact-Householder QR for B200. (n=2048 routed to
 # custom one-CTA panel + warps; n=4096 to cuSOLVER.) Validated 22/22.
@@ -137,48 +137,27 @@ def _bmm3_sub(A, B, C):
 
 if _HAS_TRITON:
     @triton.jit
-    def _build_Mt_kernel(Gp, Tp, Mp, b, sgb, sgi, sgj, stb, sti, smb, smi, smj, BB: tl.constexpr):
-        # Outputs M^T (LOWER-tri): M_T[i,j] = G[j,i] (i>j) / 1/tau[i] (i==j) / 0 (i<j). Bit-identical
-        # to V5's M^T; lets the caller solve_triangular(M_T, W, upper=False) WITHOUT a .transpose
-        # (which cuSOLVER materializes as a copy). Fuses V5's ~7 elementwise launches into 1.
+    def _build_M_kernel(Gp, Tp, Mp, b, sgb, sgi, sgj, stb, sti, smb, smi, smj, BB: tl.constexpr):
+        # Fused M = triu(G,1) with diag = 1/tau (1e30 where tau==0). Bit-identical to V5's
+        # triu+where+reciprocal+where+full+diag-copy chain, in ONE launch. b<=128 -> one CTA/matrix.
         pb = tl.program_id(0)
         i = tl.arange(0, BB)
         m2 = (i[:, None] < b) & (i[None, :] < b)
-        Gt = tl.load(Gp + pb * sgb + i[None, :] * sgi + i[:, None] * sgj, mask=m2, other=0.0)  # G[j,i]
+        G = tl.load(Gp + pb * sgb + i[:, None] * sgi + i[None, :] * sgj, mask=m2, other=0.0)
         tau = tl.load(Tp + pb * stb + i * sti, mask=i < b, other=1.0)
         nz = tau != 0.0
         inv = tl.where(nz, 1.0 / tl.where(nz, tau, 1.0), 1e30)
-        M = tl.where(i[:, None] > i[None, :], Gt, 0.0)
+        M = tl.where(i[:, None] < i[None, :], G, 0.0)
         M = tl.where(i[:, None] == i[None, :], inv[:, None], M)
         tl.store(Mp + pb * smb + i[:, None] * smi + i[None, :] * smj, M, mask=m2)
 
-    @triton.jit
-    def _build_V_kernel(Pp, Vp, m, b, spb, spr, spc, svb, svr, svc, BM: tl.constexpr, BB: tl.constexpr):
-        # V = strict-lower(P) + unit diag, in ONE launch (replaces torch.tril + diagonal.fill_).
-        pb = tl.program_id(0); pr = tl.program_id(1)
-        r = pr * BM + tl.arange(0, BM)[:, None]
-        c = tl.arange(0, BB)[None, :]
-        mask = (r < m) & (c < b)
-        P = tl.load(Pp + pb * spb + r * spr + c * spc, mask=mask, other=0.0)
-        V = tl.where(r < c, 0.0, tl.where(r == c, 1.0, P))
-        tl.store(Vp + pb * svb + r * svr + c * svc, V, mask=mask)
 
-
-def _build_Mt(G, tau_blk):
+def _build_M(G, tau_blk):
     B, b, _ = G.shape
     M = torch.empty_like(G)
-    _build_Mt_kernel[(B,)](G, tau_blk, M, b, *G.stride(), *tau_blk.stride(), *M.stride(),
-                           BB=triton.next_power_of_2(b))
+    _build_M_kernel[(B,)](G, tau_blk, M, b, *G.stride(), *tau_blk.stride(), *M.stride(),
+                          BB=triton.next_power_of_2(b))
     return M
-
-
-def _build_V(P):
-    B, m, b = P.shape
-    V = torch.empty((B, m, b), device=P.device, dtype=P.dtype)
-    BM = 64
-    _build_V_kernel[(B, triton.cdiv(m, BM))](P, V, m, b, *P.stride(), *V.stride(),
-                                             BM=BM, BB=triton.next_power_of_2(b))
-    return V
 
 
 def _split_tf32(x):
@@ -306,24 +285,21 @@ def _apply_block(H, col, b, tau, c0, c1):
     # glue trimmed: tril() already returns a fresh tensor (the old .clone() was a
     # redundant full m*b copy = a Memcpy DtoD per apply); set the unit diagonal via a
     # diagonal view instead of arange + fancy-index.
-    if _HAS_TRITON and H.is_cuda:
-        V = _build_V(P[:, :, :b])                # strict-lower(P)+unit diag in 1 launch (2->1)
-    else:
-        V = torch.tril(P[:, :, :b], diagonal=-1)
-        V.diagonal(dim1=-2, dim2=-1).fill_(1.0)
+    V = torch.tril(P[:, :, :b], diagonal=-1)
+    V.diagonal(dim1=-2, dim2=-1).fill_(1.0)
     tau_blk = tau[:, col:col + b]
     G = _gram(V.transpose(1, 2), V)
     if _HAS_TRITON and G.is_cuda:
-        M = _build_Mt(G, tau_blk)                # outputs M^T (lower-tri); 7->1, AND no solve-transpose
+        M = _build_M(G, tau_blk)                 # fused: triu(G,1)+diag(1/tau) in 1 launch (7->1)
     else:
         nz = tau_blk != 0
         inv_tau = torch.where(nz, 1.0 / torch.where(nz, tau_blk, torch.ones_like(tau_blk)),
                               torch.full_like(tau_blk, 1e30))
-        M = torch.tril(G.transpose(1, 2).contiguous(), diagonal=-1)
+        M = torch.triu(G, diagonal=1)
         M.diagonal(dim1=-2, dim2=-1).copy_(inv_tau)
     C = H[:, col:, c0:c1]
     W = _mm(V.transpose(1, 2), C)
-    Y = torch.linalg.solve_triangular(M, W, upper=False)   # M is already M^T (lower-tri) -> no .transpose
+    Y = torch.linalg.solve_triangular(M.transpose(1, 2), W, upper=False)
     _mm_sub(V, Y, C)   # C -= V @ Y, fused (no separate matmul output + sub_ kernel)
 
 

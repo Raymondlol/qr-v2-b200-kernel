@@ -72,3 +72,20 @@ project. Promoted to submission.py ON THIS BRANCH (main untouched = V5). MUST co
 
 Next (untested, further glue): fuse V=tril+fill into 1 kernel (2->1, bit-identical); fold _build_M
 into the gram epilogue (8->1); a launch-cut for n=1024's 1xTF32 path. All bounded vs the M-fusion +5.2%.
+
+## 5. ★ option (b) — deeper glue fusion: +2.25% MORE on top of V8 (~+7.4% cumulative vs V5)
+`experiments/cand_gluefuse2.py` adds two more bit-identical fusions on top of V8's `_build_M`:
+- `_build_V`: V = strict-lower(P)+unit-diag in ONE launch (replaces torch.tril + diagonal.fill_, 2->1).
+- `_build_Mt`: builds M^T (LOWER-tri) DIRECTLY, so `solve_triangular(M_T, W, upper=False)` needs no
+  `.transpose(1,2)` — which cuSOLVER was materializing as a per-apply `direct_copy`. 7->1 AND kills the copy.
+
+3-way lab (baseline = branch submission.py = V8/M-fusion): cand_gluefuse2 **0.9775x = +2.25% vs V8**,
+per-case n176 -3.3 / n352 -3.0 / **n512 -3.2 (all 4)** / n1024 -2.4 / n2048 -0.2 / n4096 0. 22/22.
+The n=512 gain is the M^T-no-transpose removing the cuSOLVER copy (real op+traffic, even GPU-bound).
+**Cumulative vs V5: 0.9478 (M-fusion) x 0.9775 (deeper) ~= 0.9265 -> ~+7.4% Modal**, ALL structural
++ bit-identical (margin preserved). Promoted to branch submission.py (= "V9"); V8 archived per request.
+
+ARCHIVES: milestones/submissionV8_gluefuse_modal5402.py (A = M-fusion, +5.2%) + a standalone copy at
+~/Downloads/submissionV8_gluefuse_modal5402.py; milestones/submissionV9_gluefuse2_modal5298.py (the (b)
+result, ~+7.4%). main UNTOUCHED = V5 5915 official. NEXT: gpumode-confirm the cumulative win (bit-identical
+-> zero correctness/margin risk; structural -> should transfer far better than the fp16x3/implicit-V artifacts).
