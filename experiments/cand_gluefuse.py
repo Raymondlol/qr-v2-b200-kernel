@@ -1,4 +1,3 @@
-# === V5 + FUSED M-BUILDER (glue launch+traffic cut, bit-identical) — Modal +5.2%, branch profiling-deepdive ===
 # Phase 1a proxy: ib=64 for n=512 (fused-panel route, fewer narrow updates).
 # qr_v2 submission: batched compact-Householder QR for B200. (n=2048 routed to
 # custom one-CTA panel + warps; n=4096 to cuSOLVER.) Validated 22/22.

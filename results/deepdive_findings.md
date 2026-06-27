@@ -49,3 +49,26 @@ it there (not n=512) flips net-regression → small clean win, and is mechanism-
   would have flagged V7's n=512 failure BEFORE building it.
 
 submission.py UNCHANGED = V5 5915µs official. All artifacts on branch `profiling-deepdive`.
+
+## 4. ★ PAYOFF — fused M-builder (option b): Modal +5.2%, bit-identical, transfer-reliable
+`experiments/cand_gluefuse.py` (= V5 + `_build_M`): one Triton kernel builds `M = triu(G,1) +
+diag(1/tau)` (b<=128, one CTA/matrix), replacing V5's ~7-launch elementwise chain (eq, reciprocal,
+where x2, full, triu, diag-copy). **Universal, BIT-IDENTICAL (22/22, margin preserved exactly).**
+
+3-way lab compare (same container, 12 reps), baseline = V5:
+  cand_gluefuse (M-fusion)      geomean **0.9478x = +5.2%**  | implicitV->small-n  0.9940x = +0.6%
+  per-case (M-fusion): n176 -12.8%, n352 -10.2%, n512 -2.6% (all 4), n1024 -5.8..-6.8%,
+                       n2048 -9.0% (low batch=8, occupancy-bound), n4096 0% (geqrf path).
+
+WHY it beats the launch-gap prediction (helps even GPU-bound n=512): it cuts BOTH ~6 kernel
+LAUNCHES/apply AND ~6 redundant HBM passes over the [b,b] G/M tensors (each torch glue op re-read/
+wrote them). So it wins both the launch-bound regime (small-n, low-batch n=2048) AND the
+glue-traffic at n=512. The small-n implicit-V (+0.6%) is dwarfed by it.
+
+WHY it should TRANSFER (unlike fp16x3 / implicit-V-n512): purely STRUCTURAL (fewer dispatches +
+fewer bytes moved), BIT-IDENTICAL result, zero precision/ALU trade. Asymmetric: ~0 downside (one
+tiny kernel replacing seven), +3-5% likely official. **The cleanest deployable win found in the
+project. Promoted to submission.py ON THIS BRANCH (main untouched = V5). MUST confirm via gpumode.**
+
+Next (untested, further glue): fuse V=tril+fill into 1 kernel (2->1, bit-identical); fold _build_M
+into the gram epilogue (8->1); a launch-cut for n=1024's 1xTF32 path. All bounded vs the M-fusion +5.2%.
