@@ -12,7 +12,8 @@ bare = (modal.Image.debian_slim(python_version="3.12")
         .pip_install("numpy")
         .pip_install("torch", index_url="https://download.pytorch.org/whl/cu128"))
 # Image 2 = torch+triton + the cute-dsl wheel, but NO cuda-devel (so NO nvcc) -> tests driver-JIT path.
-withdsl = bare.pip_install("nvidia-cutlass-dsl")
+# Pin to the EVAL version (4.5.2) so a green probe means our Modal loop matches the board.
+withdsl = bare.pip_install("nvidia-cutlass-dsl==4.5.2")
 
 app = modal.App("cutedsl-probe")
 
