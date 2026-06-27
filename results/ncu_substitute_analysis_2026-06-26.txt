@@ -1,0 +1,684 @@
+✓ Initialized. View run at 
+https://modal.com/apps/raymxnd/main/ap-REmnD6946mFCn1olVuz9rO
+✓ Created objects.
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/epic-mestorf-c6455f/modal_k
+│   ernel_analysis.py
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/epic-mestorf-c6455f/harness
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/epic-mestorf-c6455f/submiss
+│   ion.py
+└── 🔨 Created function analyze.
+
+==========
+== CUDA ==
+==========
+
+CUDA Version 13.0.1
+
+Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+By pulling and using the container, you accept the terms and conditions of this license:
+https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+
+A copy of this license is made available in this container at /NGC-DL-CONTAINER-LICENSE for your convenience.
+
+======================================================================
+SECTION 0: env
+======================================================================
+
+$ uname -a
+Linux modal 4.19.0-gvisor #1 SMP Sun Jan 10 15:06:54 PST 2016 x86_64 x86_64 x86_64 GNU/Linux
+
+
+$ nvidia-smi --query-gpu=name,driver_version --format=csv
+name, driver_version
+NVIDIA B200, 580.95.05
+
+
+$ /usr/local/cuda/bin/cuobjdump --version | head -3
+cuobjdump: NVIDIA (R) fat binary listing tool
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Thu_Aug_14_07:26:37_PM_PDT_2025
+
+
+$ python -c "import torch,triton;print('torch',torch.__version__,'triton',triton.__version__)"
+torch 2.11.0+cu128 triton 3.6.0
+
+
+======================================================================
+SECTION 1: compile real QR kernels (n=512 b=640) + per-kernel resources
+======================================================================
+
+$ python /tmp/introspect.py
+===KERN_JSON===
+[{"name": "_panel_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 141, "n_spills": 0, "shared": 1024, "cubin": "/tmp/cubins/_panel_kernel_4w_141r_0.cubin"}, {"name": "_panel_kernel", "num_warps": 8, "num_stages": 3, "n_regs": 255, "n_spills": 18, "shared": 2048, "cubin": "/tmp/cubins/_panel_kernel_8w_255r_1.cubin"}, {"name": "_panel_kernel", "num_warps": 8, "num_stages": 3, "n_regs": 164, "n_spills": 0, "shared": 2048, "cubin": "/tmp/cubins/_panel_kernel_8w_164r_2.cubin"}, {"name": "_bmm_x3_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 108, "n_spills": 0, "shared": 49160, "cubin": "/tmp/cubins/_bmm_x3_kernel_4w_108r_3.cubin"}, {"name": "_bmm_x3_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 196, "n_spills": 0, "shared": 65544, "cubin": "/tmp/cubins/_bmm_x3_kernel_4w_196r_4.cubin"}, {"name": "_bmm_x3_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 191, "n_spills": 0, "shared": 81928, "cubin": "/tmp/cubins/_bmm_x3_kernel_4w_191r_5.cubin"}, {"name": "_bmm_x3_kernel", "num_warps": 8, "num_stages": 3, "n_regs": 178, "n_spills": 0, "shared": 98312, "cubin": "/tmp/cubins/_bmm_x3_kernel_8w_178r_6.cubin"}, {"name": "_bmm_x3_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 200, "n_spills": 0, "shared": 49152, "cubin": "/tmp/cubins/_bmm_x3_kernel_4w_200r_7.cubin"}, {"name": "_bmm_x3_sub_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 128, "n_spills": 0, "shared": 49160, "cubin": "/tmp/cubins/_bmm_x3_sub_kernel_4w_128r_8.cubin"}, {"name": "_bmm_x3_sub_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 207, "n_spills": 0, "shared": 65544, "cubin": "/tmp/cubins/_bmm_x3_sub_kernel_4w_207r_9.cubin"}, {"name": "_bmm_x3_sub_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 209, "n_spills": 0, "shared": 81928, "cubin": "/tmp/cubins/_bmm_x3_sub_kernel_4w_209r_10.cubin"}, {"name": "_bmm_x3_sub_kernel", "num_warps": 8, "num_stages": 3, "n_regs": 179, "n_spills": 0, "shared": 98312, "cubin": "/tmp/cubins/_bmm_x3_sub_kernel_8w_179r_11.cubin"}, {"name": "_bmm_x3_sub_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 221, "n_spills": 0, "shared": 49152, "cubin": "/tmp/cubins/_bmm_x3_sub_kernel_4w_221r_12.cubin"}, {"name": "_panel_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 179, "n_spills": 0, "shared": 1024, "cubin": "/tmp/cubins/_panel_kernel_4w_179r_13.cubin"}]
+===END_KERN_JSON===
+
+kernel                         warps stg  regs  spill    smem   occ  limiter  act_w
+-----------------------------------------------------------------------------------
+_bmm_x3_kernel                     4   3   108      0   49160  0.25     regs     16
+_bmm_x3_kernel                     4   3   196      0   65544 0.125     regs      8
+_bmm_x3_kernel                     4   3   191      0   81928 0.125     regs      8
+_bmm_x3_kernel                     4   3   200      0   49152 0.125     regs      8
+_bmm_x3_kernel                     8   3   178      0   98312 0.125     regs      8
+_bmm_x3_sub_kernel                 4   3   128      0   49160  0.25     regs     16
+_bmm_x3_sub_kernel                 4   3   207      0   65544 0.125     regs      8
+_bmm_x3_sub_kernel                 4   3   209      0   81928 0.125     regs      8
+_bmm_x3_sub_kernel                 4   3   221      0   49152 0.125     regs      8
+_bmm_x3_sub_kernel                 8   3   179      0   98312 0.125     regs      8
+_panel_kernel                      4   3   141      0    1024 0.188     regs     12
+_panel_kernel                      4   3   179      0    1024 0.125     regs      8
+_panel_kernel                      8   3   255     18    2048 0.125     regs      8
+_panel_kernel                      8   3   164      0    2048 0.125     regs      8
+
+======================================================================
+SECTION 2: SASS instruction mix — _panel_kernel (latency-bound check)
+======================================================================
+
+$ /usr/local/cuda/bin/cuobjdump -sass /tmp/cubins/_panel_kernel_4w_141r_0.cubin 2>/dev/null | head -4000
+
+        code for sm_100a
+        .target sm_100a
+
+                Function : _panel_kernel
+        .headerflags    @"EF_CUDA_ACCELERATORS EF_CUDA_SM100 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM100)"
+        /*0000*/                   LDC R1, c[0x0][0x37c] ;                                            /* 0x0000df00ff017b82 */
+                                                                                                      /* 0x000e220000000800 */
+        /*0010*/                   S2R R96, SR_TID.X ;                                                /* 0x0000000000607919 */
+                                                                                                      /* 0x000e6e0000002100 */
+        /*0020*/                   S2UR UR4, SR_CTAID.X ;                                             /* 0x00000000000479c3 */
+                                                                                                      /* 0x000ea20000002500 */
+        /*0030*/                   LDCU.128 UR16, c[0x0][0x390] ;                                     /* 0x00007200ff1077ac */
+                                                                                                      /* 0x000ea20008000c00 */
+        /*0040*/                   CS2R R12, SRZ ;                                                    /* 0x00000000000c7805 */
+                                                                                                      /* 0x000fc4000001ff00 */
+        /*0050*/                   CS2R R14, SRZ ;                                                    /* 0x00000000000e7805 */
+                                                                                                      /* 0x000fe4000001ff00 */
+        /*0060*/                   CS2R R16, SRZ ;                                                    /* 0x0000000000107805 */
+                                                                                                      /* 0x000fe2000001ff00 */
+        /*0070*/                   LDCU.64 UR6, c[0x0][0x380] ;         
+
+[_panel_kernel_4w_141r_0.cubin] 776 SASS instrs — top 25 opcodes:
+    ISETP           128   16.5%
+    FSEL            100   12.9%
+    FADD             70    9.0%
+    P2R              57    7.3%
+    SHFL             52    6.7%
+    IMAD             47    6.1%
+    FMUL             39    5.0%
+    FFMA             29    3.7%
+    LOP3             22    2.8%
+    LEA              21    2.7%
+    CS2R             16    2.1%
+    SEL              16    2.1%
+    BAR              13    1.7%
+    @!P4             12    1.5%
+    @!P5             11    1.4%
+    NOP;             11    1.4%
+    LDS              10    1.3%
+    VIADD             9    1.2%
+    @!P6              9    1.2%
+    FMUL2             8    1.0%
+    @!P3              8    1.0%
+    STS               7    0.9%
+    FSETP             6    0.8%
+    LDCU              5    0.6%
+    @P4               5    0.6%
+  --- families ---
+    other           534   68.8%
+    FP-math         147   18.9%
+    warp-reduce      52    6.7%
+    shared-mem       17    2.2%
+    barrier          13    1.7%
+    global-mem        7    0.9%
+    control-flow      6    0.8%
+
+$ /usr/local/cuda/bin/cuobjdump -sass /tmp/cubins/_panel_kernel_4w_179r_13.cubin 2>/dev/null | head -4000
+
+        code for sm_100a
+        .target sm_100a
+
+                Function : _panel_kernel
+        .headerflags    @"EF_CUDA_ACCELERATORS EF_CUDA_SM100 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM100)"
+        /*0000*/                   LDC R1, c[0x0][0x37c] ;                                            /* 0x0000df00ff017b82 */
+                                                                                                      /* 0x000e220000000800 */
+        /*0010*/                   S2R R157, SR_TID.X ;                                               /* 0x00000000009d7919 */
+                                                                                                      /* 0x000e620000002100 */
+        /*0020*/                   LDCU.128 UR16, c[0x0][0x390] ;                                     /* 0x00007200ff1077ac */
+                                                                                                      /* 0x000eac0008000c00 */
+        /*0030*/                   S2UR UR4, SR_CTAID.X ;                                             /* 0x00000000000479c3 */
+                                                                                                      /* 0x000ea20000002500 */
+        /*0040*/                   LOP3.LUT R155, R155, 0xbfffffff, RZ, 0xc0, !PT ;                   /* 0xbfffffff9b9b7812 */
+                                                                                                      /* 0x000fe400078ec0ff */
+        /*0050*/                   CS2R R64, SRZ ;                                                    /* 0x0000000000407805 */
+                                                                                                      /* 0x000fe2000001ff00 */
+        /*0060*/                   LDCU.64 UR6, c[0x0][0x380] ;                                       /* 0x00007000ff0677ac */
+                                                                                                      /* 0x000ee20008000a00 */
+        /*0070*/                   CS2R R66, SRZ ;                      
+
+[_panel_kernel_4w_179r_13.cubin] 1192 SASS instrs — top 25 opcodes:
+    FSEL            164   13.8%
+    FADD            120   10.1%
+    ISETP           105    8.8%
+    LOP3             99    8.3%
+    SHFL             86    7.2%
+    IMAD             83    7.0%
+    FMUL             71    6.0%
+    FFMA             61    5.1%
+    LEA              37    3.1%
+    P2R              35    2.9%
+    @!P5             35    2.9%
+    CS2R             32    2.7%
+    @!P4             19    1.6%
+    VIADD            17    1.4%
+    @!P6             17    1.4%
+    SEL              16    1.3%
+    FMUL2            16    1.3%
+    @P6              15    1.3%
+    @P0              13    1.1%
+    BAR              13    1.1%
+    STS              11    0.9%
+    NOP;             11    0.9%
+    @P1              10    0.8%
+    @P5              10    0.8%
+    LDS              10    0.8%
+  --- families ---
+    other           798   66.9%
+    FP-math         261   21.9%
+    warp-reduce      86    7.2%
+    shared-mem       21    1.8%
+    barrier          13    1.1%
+    global-mem        7    0.6%
+    control-flow      6    0.5%
+
+$ /usr/local/cuda/bin/cuobjdump -sass /tmp/cubins/_panel_kernel_8w_164r_2.cubin 2>/dev/null | head -4000
+
+        code for sm_100a
+        .target sm_100a
+
+                Function : _panel_kernel
+        .headerflags    @"EF_CUDA_ACCELERATORS EF_CUDA_SM100 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM100)"
+        /*0000*/                   LDC R1, c[0x0][0x37c] ;                                              /* 0x0000df00ff017b82 */
+                                                                                                        /* 0x000e220000000800 */
+        /*0010*/                   S2R R146, SR_TID.X ;                                                 /* 0x0000000000927919 */
+                                                                                                        /* 0x000e620000002100 */
+        /*0020*/                   LDCU.128 UR16, c[0x0][0x390] ;                                       /* 0x00007200ff1077ac */
+                                                                                                        /* 0x000eac0008000c00 */
+        /*0030*/                   S2UR UR4, SR_CTAID.X ;                                               /* 0x00000000000479c3 */
+                                                                                                        /* 0x000ea20000002500 */
+        /*0040*/                   LOP3.LUT R144, R144, 0xefffffff, RZ, 0xc0, !PT ;                     /* 0xefffffff90907812 */
+                                                                                                        /* 0x000fe400078ec0ff */
+        /*0050*/                   CS2R R64, SRZ ;                                                      /* 0x0000000000407805 */
+                                                                                                        /* 0x000fe2000001ff00 */
+        /*0060*/                   LDCU.64 UR6, c[0x0][0x380] ;                                         /* 0x00007000ff0677ac */
+                                                                                                        /* 0x000ee20008000a00 */
+        /*0070*/                   CS2R R66,
+
+[_panel_kernel_8w_164r_2.cubin] 1144 SASS instrs — top 25 opcodes:
+    FSEL            148   12.9%
+    FADD            124   10.8%
+    LOP3             95    8.3%
+    ISETP            92    8.0%
+    SHFL             90    7.9%
+    FMUL             71    6.2%
+    FFMA             61    5.3%
+    IMAD             59    5.2%
+    LEA              36    3.1%
+    @!P5             34    3.0%
+    CS2R             32    2.8%
+    P2R              30    2.6%
+    VIADD            20    1.7%
+    @!P4             20    1.7%
+    STS              19    1.7%
+    @P1              17    1.5%
+    @!P6             17    1.5%
+    FMUL2            16    1.4%
+    NOP;             15    1.3%
+    BAR              13    1.1%
+    @P3              11    1.0%
+    @P0              11    1.0%
+    LDS              10    0.9%
+    @P2               9    0.8%
+    @P6               9    0.8%
+  --- families ---
+    other           734   64.2%
+    FP-math         265   23.2%
+    warp-reduce      90    7.9%
+    shared-mem       29    2.5%
+    barrier          13    1.1%
+    global-mem        7    0.6%
+    control-flow      6    0.5%
+
+$ /usr/local/cuda/bin/cuobjdump -sass /tmp/cubins/_panel_kernel_8w_255r_1.cubin 2>/dev/null | head -4000
+
+        code for sm_100a
+        .target sm_100a
+
+                Function : _panel_kernel
+        .headerflags    @"EF_CUDA_ACCELERATORS EF_CUDA_SM100 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM100)"
+        /*0000*/                   LDC R1, c[0x0][0x37c] ;                                             /* 0x0000df00ff017b82 */
+                                                                                                       /* 0x000e220000000800 */
+        /*0010*/                   S2R R162, SR_TID.X ;                                                /* 0x0000000000a27919 */
+                                                                                                       /* 0x000e620000002100 */
+        /*0020*/                   LDCU.128 UR16, c[0x0][0x390] ;                                      /* 0x00007200ff1077ac */
+                                                                                                       /* 0x000eac0008000c00 */
+        /*0030*/                   S2UR UR4, SR_CTAID.X ;                                              /* 0x00000000000479c3 */
+                                                                                                       /* 0x000ea20000002500 */
+        /*0040*/                   LOP3.LUT R0, R0, 0xffff7fff, RZ, 0xc0, !PT ;                        /* 0xffff7fff00007812 */
+                                                                                                       /* 0x000fe400078ec0ff */
+        /*0050*/                   CS2R R156, SRZ ;                                                    /* 0x00000000009c7805 */
+                                                                                                       /* 0x000fe2000001ff00 */
+        /*0060*/                   LDCU.64 UR6, c[0x0][0x380] ;                                        /* 0x00007000ff0677ac */
+                                                                                                       /* 0x000ee20008000a00 */
+        /*0070*/                   LOP3.LUT R2, R2, 0x7fff
+
+[_panel_kernel_8w_255r_1.cubin] 1997 SASS instrs — top 25 opcodes:
+    FSEL            276   13.8%
+    FADD            222   11.1%
+    LOP3            189    9.5%
+    SHFL            154    7.7%
+    FMUL            139    7.0%
+    IMAD            138    6.9%
+    FFMA            125    6.3%
+    ISETP           113    5.7%
+    LEA              70    3.5%
+    @!P6             68    3.4%
+    CS2R             64    3.2%
+    @P1              42    2.1%
+    P2R              41    2.1%
+    @!P4             37    1.9%
+    STS              35    1.8%
+    VIADD            34    1.7%
+    @!P5             34    1.7%
+    FMUL2            30    1.5%
+    @P3              16    0.8%
+    FADD2            16    0.8%
+    @P0              15    0.8%
+    @P2              14    0.7%
+    BAR              13    0.7%
+    @P6              11    0.6%
+    @P5              11    0.6%
+  --- families ---
+    other          1262   63.2%
+    FP-math         495   24.8%
+    warp-reduce     154    7.7%
+    shared-mem       45    2.3%
+    global-mem       24    1.2%
+    barrier          13    0.7%
+    control-flow      4    0.2%
+
+======================================================================
+SECTION 3: kineto per-kernel timeline (gVisor-safe) — durations + launch gaps
+======================================================================
+[note] nsys is ALSO gVisor-blocked (GPU clock-sync InternalError, no report). kineto works.
+
+$ python /work/kineto_run.py
+===KINETO===
+total GPU us/iter: 12252.5
+by category:
+  PANEL                      5313.7 us   43.4%
+  tf32x3-GEMM(trailing)      3366.9 us   27.5%
+  cuSOLVER/solve             1794.5 us   14.6%
+  glue                       1667.1 us   13.6%
+  cuBLAS-GEMM                  97.9 us    0.8%
+  other                        12.4 us    0.1%
+top 18 kernels by self GPU time (us/iter, launches/iter):
+   5313.66 us  x   8.0  _panel_kernel
+   1869.41 us  x  14.0  _bmm_x3_kernel
+   1794.51 us  x  10.0  void batch_trsm_left_kernel<float, 64, 4, 3, false, false, false>(cublasTrsmBatc
+   1497.46 us  x   7.0  _bmm_x3_sub_kernel
+    582.94 us  x   7.0  void at::native::triu_tril_kernel<float, int, false, 2, false>(at::cuda::detail:
+    426.53 us  x   2.0  Memcpy DtoD (Device -> Device)
+    350.34 us  x  14.0  void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<a
+    168.08 us  x   7.0  void at::native::triu_tril_kernel<float, int, true, 2, false>(at::cuda::detail::
+     97.90 us  x   3.0  void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_64x128_16x6_nn_align4>(cutla
+     27.26 us  x   7.0  void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<a
+     22.05 us  x  15.0  void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>
+     20.15 us  x  14.0  void (anonymous namespace)::elementwise_kernel_with_index<int, at::native::arang
+     17.16 us  x   7.0  void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<a
+     14.42 us  x   7.0  void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<a
+     14.41 us  x   7.0  void at::native::vectorized_elementwise_kernel<4, at::native::reciprocal_kernel_
+     12.43 us  x   6.0  void offsetPointerArray_kernel<float>(float**, float const**, int, int, int, flo
+     12.35 us  x   7.0  void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespa
+     11.43 us  x   7.0  void at::native::vectorized_elementwise_kernel<4, at::native::AUnaryFunctor<floa
+===END_KINETO===
+/usr/local/lib/python3.12/site-packages/torch/profiler/profiler.py:224: UserWarning: Warning: Profiler clears events at the end of each cycle.Only events from the current cycle will be reported.To keep events across cycles, set acc_events=True.
+  _warn_once(
+
+
+======================================================================
+DONE
+======================================================================
+======================================================================
+SECTION 0: env
+======================================================================
+
+$ uname -a
+Linux modal 4.19.0-gvisor #1 SMP Sun Jan 10 15:06:54 PST 2016 x86_64 x86_64 x86_64 GNU/Linux
+
+
+$ nvidia-smi --query-gpu=name,driver_version --format=csv
+name, driver_version
+NVIDIA B200, 580.95.05
+
+
+$ /usr/local/cuda/bin/cuobjdump --version | head -3
+cuobjdump: NVIDIA (R) fat binary listing tool
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Thu_Aug_14_07:26:37_PM_PDT_2025
+
+
+$ python -c "import torch,triton;print('torch',torch.__version__,'triton',triton.__version__)"
+torch 2.11.0+cu128 triton 3.6.0
+
+
+======================================================================
+SECTION 1: compile real QR kernels (n=512 b=640) + per-kernel resources
+======================================================================
+
+$ python /tmp/introspect.py
+===KERN_JSON===
+[{"name": "_panel_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 141, "n_spills": 0, "shared": 1024, "cubin": "/tmp/cubins/_panel_kernel_4w_141r_0.cubin"}, {"name": "_panel_kernel", "num_warps": 8, "num_stages": 3, "n_regs": 255, "n_spills": 18, "shared": 2048, "cubin": "/tmp/cubins/_panel_kernel_8w_255r_1.cubin"}, {"name": "_panel_kernel", "num_warps": 8, "num_stages": 3, "n_regs": 164, "n_spills": 0, "shared": 2048, "cubin": "/tmp/cubins/_panel_kernel_8w_164r_2.cubin"}, {"name": "_bmm_x3_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 108, "n_spills": 0, "shared": 49160, "cubin": "/tmp/cubins/_bmm_x3_kernel_4w_108r_3.cubin"}, {"name": "_bmm_x3_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 196, "n_spills": 0, "shared": 65544, "cubin": "/tmp/cubins/_bmm_x3_kernel_4w_196r_4.cubin"}, {"name": "_bmm_x3_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 191, "n_spills": 0, "shared": 81928, "cubin": "/tmp/cubins/_bmm_x3_kernel_4w_191r_5.cubin"}, {"name": "_bmm_x3_kernel", "num_warps": 8, "num_stages": 3, "n_regs": 178, "n_spills": 0, "shared": 98312, "cubin": "/tmp/cubins/_bmm_x3_kernel_8w_178r_6.cubin"}, {"name": "_bmm_x3_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 200, "n_spills": 0, "shared": 49152, "cubin": "/tmp/cubins/_bmm_x3_kernel_4w_200r_7.cubin"}, {"name": "_bmm_x3_sub_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 128, "n_spills": 0, "shared": 49160, "cubin": "/tmp/cubins/_bmm_x3_sub_kernel_4w_128r_8.cubin"}, {"name": "_bmm_x3_sub_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 207, "n_spills": 0, "shared": 65544, "cubin": "/tmp/cubins/_bmm_x3_sub_kernel_4w_207r_9.cubin"}, {"name": "_bmm_x3_sub_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 209, "n_spills": 0, "shared": 81928, "cubin": "/tmp/cubins/_bmm_x3_sub_kernel_4w_209r_10.cubin"}, {"name": "_bmm_x3_sub_kernel", "num_warps": 8, "num_stages": 3, "n_regs": 179, "n_spills": 0, "shared": 98312, "cubin": "/tmp/cubins/_bmm_x3_sub_kernel_8w_179r_11.cubin"}, {"name": "_bmm_x3_sub_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 221, "n_spills": 0, "shared": 49152, "cubin": "/tmp/cubins/_bmm_x3_sub_kernel_4w_221r_12.cubin"}, {"name": "_panel_kernel", "num_warps": 4, "num_stages": 3, "n_regs": 179, "n_spills": 0, "shared": 1024, "cubin": "/tmp/cubins/_panel_kernel_4w_179r_13.cubin"}]
+===END_KERN_JSON===
+
+kernel                         warps stg  regs  spill    smem   occ  limiter  act_w
+-----------------------------------------------------------------------------------
+_bmm_x3_kernel                     4   3   108      0   49160  0.25     regs     16
+_bmm_x3_kernel                     4   3   196      0   65544 0.125     regs      8
+_bmm_x3_kernel                     4   3   191      0   81928 0.125     regs      8
+_bmm_x3_kernel                     4   3   200      0   49152 0.125     regs      8
+_bmm_x3_kernel                     8   3   178      0   98312 0.125     regs      8
+_bmm_x3_sub_kernel                 4   3   128      0   49160  0.25     regs     16
+_bmm_x3_sub_kernel                 4   3   207      0   65544 0.125     regs      8
+_bmm_x3_sub_kernel                 4   3   209      0   81928 0.125     regs      8
+_bmm_x3_sub_kernel                 4   3   221      0   49152 0.125     regs      8
+_bmm_x3_sub_kernel                 8   3   179      0   98312 0.125     regs      8
+_panel_kernel                      4   3   141      0    1024 0.188     regs     12
+_panel_kernel                      4   3   179      0    1024 0.125     regs      8
+_panel_kernel                      8   3   255     18    2048 0.125     regs      8
+_panel_kernel                      8   3   164      0    2048 0.125     regs      8
+
+======================================================================
+SECTION 2: SASS instruction mix — _panel_kernel (latency-bound check)
+======================================================================
+
+$ /usr/local/cuda/bin/cuobjdump -sass /tmp/cubins/_panel_kernel_4w_141r_0.cubin 2>/dev/null | head -4000
+
+	code for sm_100a
+	.target	sm_100a
+
+		Function : _panel_kernel
+	.headerflags	@"EF_CUDA_ACCELERATORS EF_CUDA_SM100 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM100)"
+        /*0000*/                   LDC R1, c[0x0][0x37c] ;                                            /* 0x0000df00ff017b82 */
+                                                                                                      /* 0x000e220000000800 */
+        /*0010*/                   S2R R96, SR_TID.X ;                                                /* 0x0000000000607919 */
+                                                                                                      /* 0x000e6e0000002100 */
+        /*0020*/                   S2UR UR4, SR_CTAID.X ;                                             /* 0x00000000000479c3 */
+                                                                                                      /* 0x000ea20000002500 */
+        /*0030*/                   LDCU.128 UR16, c[0x0][0x390] ;                                     /* 0x00007200ff1077ac */
+                                                                                                      /* 0x000ea20008000c00 */
+        /*0040*/                   CS2R R12, SRZ ;                                                    /* 0x00000000000c7805 */
+                                                                                                      /* 0x000fc4000001ff00 */
+        /*0050*/                   CS2R R14, SRZ ;                                                    /* 0x00000000000e7805 */
+                                                                                                      /* 0x000fe4000001ff00 */
+        /*0060*/                   CS2R R16, SRZ ;                                                    /* 0x0000000000107805 */
+                                                                                                      /* 0x000fe2000001ff00 */
+        /*0070*/                   LDCU.64 UR6, c[0x0][0x380] ;         
+
+[_panel_kernel_4w_141r_0.cubin] 776 SASS instrs — top 25 opcodes:
+    ISETP           128   16.5%
+    FSEL            100   12.9%
+    FADD             70    9.0%
+    P2R              57    7.3%
+    SHFL             52    6.7%
+    IMAD             47    6.1%
+    FMUL             39    5.0%
+    FFMA             29    3.7%
+    LOP3             22    2.8%
+    LEA              21    2.7%
+    CS2R             16    2.1%
+    SEL              16    2.1%
+    BAR              13    1.7%
+    @!P4             12    1.5%
+    @!P5             11    1.4%
+    NOP;             11    1.4%
+    LDS              10    1.3%
+    VIADD             9    1.2%
+    @!P6              9    1.2%
+    FMUL2             8    1.0%
+    @!P3              8    1.0%
+    STS               7    0.9%
+    FSETP             6    0.8%
+    LDCU              5    0.6%
+    @P4               5    0.6%
+  --- families ---
+    other           534   68.8%
+    FP-math         147   18.9%
+    warp-reduce      52    6.7%
+    shared-mem       17    2.2%
+    barrier          13    1.7%
+    global-mem        7    0.9%
+    control-flow      6    0.8%
+
+$ /usr/local/cuda/bin/cuobjdump -sass /tmp/cubins/_panel_kernel_4w_179r_13.cubin 2>/dev/null | head -4000
+
+	code for sm_100a
+	.target	sm_100a
+
+		Function : _panel_kernel
+	.headerflags	@"EF_CUDA_ACCELERATORS EF_CUDA_SM100 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM100)"
+        /*0000*/                   LDC R1, c[0x0][0x37c] ;                                            /* 0x0000df00ff017b82 */
+                                                                                                      /* 0x000e220000000800 */
+        /*0010*/                   S2R R157, SR_TID.X ;                                               /* 0x00000000009d7919 */
+                                                                                                      /* 0x000e620000002100 */
+        /*0020*/                   LDCU.128 UR16, c[0x0][0x390] ;                                     /* 0x00007200ff1077ac */
+                                                                                                      /* 0x000eac0008000c00 */
+        /*0030*/                   S2UR UR4, SR_CTAID.X ;                                             /* 0x00000000000479c3 */
+                                                                                                      /* 0x000ea20000002500 */
+        /*0040*/                   LOP3.LUT R155, R155, 0xbfffffff, RZ, 0xc0, !PT ;                   /* 0xbfffffff9b9b7812 */
+                                                                                                      /* 0x000fe400078ec0ff */
+        /*0050*/                   CS2R R64, SRZ ;                                                    /* 0x0000000000407805 */
+                                                                                                      /* 0x000fe2000001ff00 */
+        /*0060*/                   LDCU.64 UR6, c[0x0][0x380] ;                                       /* 0x00007000ff0677ac */
+                                                                                                      /* 0x000ee20008000a00 */
+        /*0070*/                   CS2R R66, SRZ ;                      
+
+[_panel_kernel_4w_179r_13.cubin] 1192 SASS instrs — top 25 opcodes:
+    FSEL            164   13.8%
+    FADD            120   10.1%
+    ISETP           105    8.8%
+    LOP3             99    8.3%
+    SHFL             86    7.2%
+    IMAD             83    7.0%
+    FMUL             71    6.0%
+    FFMA             61    5.1%
+    LEA              37    3.1%
+    P2R              35    2.9%
+    @!P5             35    2.9%
+    CS2R             32    2.7%
+    @!P4             19    1.6%
+    VIADD            17    1.4%
+    @!P6             17    1.4%
+    SEL              16    1.3%
+    FMUL2            16    1.3%
+    @P6              15    1.3%
+    @P0              13    1.1%
+    BAR              13    1.1%
+    STS              11    0.9%
+    NOP;             11    0.9%
+    @P1              10    0.8%
+    @P5              10    0.8%
+    LDS              10    0.8%
+  --- families ---
+    other           798   66.9%
+    FP-math         261   21.9%
+    warp-reduce      86    7.2%
+    shared-mem       21    1.8%
+    barrier          13    1.1%
+    global-mem        7    0.6%
+    control-flow      6    0.5%
+
+$ /usr/local/cuda/bin/cuobjdump -sass /tmp/cubins/_panel_kernel_8w_164r_2.cubin 2>/dev/null | head -4000
+
+	code for sm_100a
+	.target	sm_100a
+
+		Function : _panel_kernel
+	.headerflags	@"EF_CUDA_ACCELERATORS EF_CUDA_SM100 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM100)"
+        /*0000*/                   LDC R1, c[0x0][0x37c] ;                                              /* 0x0000df00ff017b82 */
+                                                                                                        /* 0x000e220000000800 */
+        /*0010*/                   S2R R146, SR_TID.X ;                                                 /* 0x0000000000927919 */
+                                                                                                        /* 0x000e620000002100 */
+        /*0020*/                   LDCU.128 UR16, c[0x0][0x390] ;                                       /* 0x00007200ff1077ac */
+                                                                                                        /* 0x000eac0008000c00 */
+        /*0030*/                   S2UR UR4, SR_CTAID.X ;                                               /* 0x00000000000479c3 */
+                                                                                                        /* 0x000ea20000002500 */
+        /*0040*/                   LOP3.LUT R144, R144, 0xefffffff, RZ, 0xc0, !PT ;                     /* 0xefffffff90907812 */
+                                                                                                        /* 0x000fe400078ec0ff */
+        /*0050*/                   CS2R R64, SRZ ;                                                      /* 0x0000000000407805 */
+                                                                                                        /* 0x000fe2000001ff00 */
+        /*0060*/                   LDCU.64 UR6, c[0x0][0x380] ;                                         /* 0x00007000ff0677ac */
+                                                                                                        /* 0x000ee20008000a00 */
+        /*0070*/                   CS2R R66,
+
+[_panel_kernel_8w_164r_2.cubin] 1144 SASS instrs — top 25 opcodes:
+    FSEL            148   12.9%
+    FADD            124   10.8%
+    LOP3             95    8.3%
+    ISETP            92    8.0%
+    SHFL             90    7.9%
+    FMUL             71    6.2%
+    FFMA             61    5.3%
+    IMAD             59    5.2%
+    LEA              36    3.1%
+    @!P5             34    3.0%
+    CS2R             32    2.8%
+    P2R              30    2.6%
+    VIADD            20    1.7%
+    @!P4             20    1.7%
+    STS              19    1.7%
+    @P1              17    1.5%
+    @!P6             17    1.5%
+    FMUL2            16    1.4%
+    NOP;             15    1.3%
+    BAR              13    1.1%
+    @P3              11    1.0%
+    @P0              11    1.0%
+    LDS              10    0.9%
+    @P2               9    0.8%
+    @P6               9    0.8%
+  --- families ---
+    other           734   64.2%
+    FP-math         265   23.2%
+    warp-reduce      90    7.9%
+    shared-mem       29    2.5%
+    barrier          13    1.1%
+    global-mem        7    0.6%
+    control-flow      6    0.5%
+
+$ /usr/local/cuda/bin/cuobjdump -sass /tmp/cubins/_panel_kernel_8w_255r_1.cubin 2>/dev/null | head -4000
+
+	code for sm_100a
+	.target	sm_100a
+
+		Function : _panel_kernel
+	.headerflags	@"EF_CUDA_ACCELERATORS EF_CUDA_SM100 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM100)"
+        /*0000*/                   LDC R1, c[0x0][0x37c] ;                                             /* 0x0000df00ff017b82 */
+                                                                                                       /* 0x000e220000000800 */
+        /*0010*/                   S2R R162, SR_TID.X ;                                                /* 0x0000000000a27919 */
+                                                                                                       /* 0x000e620000002100 */
+        /*0020*/                   LDCU.128 UR16, c[0x0][0x390] ;                                      /* 0x00007200ff1077ac */
+                                                                                                       /* 0x000eac0008000c00 */
+        /*0030*/                   S2UR UR4, SR_CTAID.X ;                                              /* 0x00000000000479c3 */
+                                                                                                       /* 0x000ea20000002500 */
+        /*0040*/                   LOP3.LUT R0, R0, 0xffff7fff, RZ, 0xc0, !PT ;                        /* 0xffff7fff00007812 */
+                                                                                                       /* 0x000fe400078ec0ff */
+        /*0050*/                   CS2R R156, SRZ ;                                                    /* 0x00000000009c7805 */
+                                                                                                       /* 0x000fe2000001ff00 */
+        /*0060*/                   LDCU.64 UR6, c[0x0][0x380] ;                                        /* 0x00007000ff0677ac */
+                                                                                                       /* 0x000ee20008000a00 */
+        /*0070*/                   LOP3.LUT R2, R2, 0x7fff
+
+[_panel_kernel_8w_255r_1.cubin] 1997 SASS instrs — top 25 opcodes:
+    FSEL            276   13.8%
+    FADD            222   11.1%
+    LOP3            189    9.5%
+    SHFL            154    7.7%
+    FMUL            139    7.0%
+    IMAD            138    6.9%
+    FFMA            125    6.3%
+    ISETP           113    5.7%
+    LEA              70    3.5%
+    @!P6             68    3.4%
+    CS2R             64    3.2%
+    @P1              42    2.1%
+    P2R              41    2.1%
+    @!P4             37    1.9%
+    STS              35    1.8%
+    VIADD            34    1.7%
+    @!P5             34    1.7%
+    FMUL2            30    1.5%
+    @P3              16    0.8%
+    FADD2            16    0.8%
+    @P0              15    0.8%
+    @P2              14    0.7%
+    BAR              13    0.7%
+    @P6              11    0.6%
+    @P5              11    0.6%
+  --- families ---
+    other          1262   63.2%
+    FP-math         495   24.8%
+    warp-reduce     154    7.7%
+    shared-mem       45    2.3%
+    global-mem       24    1.2%
+    barrier          13    0.7%
+    control-flow      4    0.2%
+
+======================================================================
+SECTION 3: kineto per-kernel timeline (gVisor-safe) — durations + launch gaps
+======================================================================
+[note] nsys is ALSO gVisor-blocked (GPU clock-sync InternalError, no report). kineto works.
+
+$ python /work/kineto_run.py
+===KINETO===
+total GPU us/iter: 12252.5
+by category:
+  PANEL                      5313.7 us   43.4%
+  tf32x3-GEMM(trailing)      3366.9 us   27.5%
+  cuSOLVER/solve             1794.5 us   14.6%
+  glue                       1667.1 us   13.6%
+  cuBLAS-GEMM                  97.9 us    0.8%
+  other                        12.4 us    0.1%
+top 18 kernels by self GPU time (us/iter, launches/iter):
+   5313.66 us  x   8.0  _panel_kernel
+   1869.41 us  x  14.0  _bmm_x3_kernel
+   1794.51 us  x  10.0  void batch_trsm_left_kernel<float, 64, 4, 3, false, false, false>(cublasTrsmBatc
+   1497.46 us  x   7.0  _bmm_x3_sub_kernel
+    582.94 us  x   7.0  void at::native::triu_tril_kernel<float, int, false, 2, false>(at::cuda::detail:
+    426.53 us  x   2.0  Memcpy DtoD (Device -> Device)
+    350.34 us  x  14.0  void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<a
+    168.08 us  x   7.0  void at::native::triu_tril_kernel<float, int, true, 2, false>(at::cuda::detail::
+     97.90 us  x   3.0  void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_64x128_16x6_nn_align4>(cutla
+     27.26 us  x   7.0  void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<a
+     22.05 us  x  15.0  void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>
+     20.15 us  x  14.0  void (anonymous namespace)::elementwise_kernel_with_index<int, at::native::arang
+     17.16 us  x   7.0  void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<a
+     14.42 us  x   7.0  void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<a
+     14.41 us  x   7.0  void at::native::vectorized_elementwise_kernel<4, at::native::reciprocal_kernel_
+     12.43 us  x   6.0  void offsetPointerArray_kernel<float>(float**, float const**, int, int, int, flo
+     12.35 us  x   7.0  void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespa
+     11.43 us  x   7.0  void at::native::vectorized_elementwise_kernel<4, at::native::AUnaryFunctor<floa
+===END_KINETO===
+/usr/local/lib/python3.12/site-packages/torch/profiler/profiler.py:224: UserWarning: Warning: Profiler clears events at the end of each cycle.Only events from the current cycle will be reported.To keep events across cycles, set acc_events=True.
+  _warn_once(
+
+
+======================================================================
+DONE
+======================================================================
+Stopping app - local entrypoint completed.
+✓ App completed. View run at 
+https://modal.com/apps/raymxnd/main/ap-REmnD6946mFCn1olVuz9rO
