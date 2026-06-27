@@ -1,0 +1,131 @@
+B200 tf32x3 ridge ~= 20.6 FLOP/byte (eff peak 165 TF/s / HBM 8 TB/s). AI<ridge => memory-side; AI>>ridge => compute-side.
+
+================ n=176 ================
+  panel-kernel launches:  3   apply_block calls:  2   GEMM launches:  6  (= 2x3)
+  kernel           M    N    K  cnt      AI  bound
+  W      V^TC     64  112  176    1    16.5  MEM 
+  gram   V^TV     64   64  176    1    13.5  MEM 
+  gram   V^TV     64   64  112    1    12.4  MEM 
+  W      V^TC     64   48  112    1    11.0  MEM 
+  update C-=VY   176  112   64    1    10.9  MEM 
+  update C-=VY   112   48   64    1     8.2  MEM 
+  ---- GEMM totals: useful 0.01 GFLOP, HBM 0.7 MB/matrix, flop-weighted AI = 12.4 (MEM-side)
+       GEMM-shape instances memory-bound: 6/6
+
+================ n=352 ================
+  panel-kernel launches:  6   apply_block calls:  5   GEMM launches: 15  (= 5x3)
+  kernel           M    N    K  cnt      AI  bound
+  W      V^TC    128  224  352    1    33.1  comp
+  gram   V^TV    128  128  352    1    27.1  comp
+  gram   V^TV    128  128  224    1    24.9  comp
+  W      V^TC    128   96  224    1    22.0  comp
+  update C-=VY   352  224  128    1    21.8  comp
+  update C-=VY   224   96  128    1    16.4  MEM 
+  gram   V^TV     64   64  352    1    14.7  MEM 
+  W      V^TC     64   64  352    1    14.7  MEM 
+  gram   V^TV     64   64  224    1    14.0  MEM 
+  W      V^TC     64   64  224    1    14.0  MEM 
+  gram   V^TV     64   64   96    1    12.0  MEM 
+  update C-=VY   352   64   64    1    10.1  MEM 
+  update C-=VY   224   64   64    1     9.7  MEM 
+  W      V^TC     64   32   96    1     8.7  MEM 
+  update C-=VY    96   32   64    1     6.9  MEM 
+  ---- GEMM totals: useful 0.09 GFLOP, HBM 4.1 MB/matrix, flop-weighted AI = 20.8 (compute-side)
+       GEMM-shape instances memory-bound: 10/15
+
+================ n=512 ================
+  panel-kernel launches:  8   apply_block calls:  7   GEMM launches: 21  (= 7x3)
+  kernel           M    N    K  cnt      AI  bound
+  W      V^TC    128  384  512    1    40.4  comp
+  W      V^TC    128  256  384    1    34.9  comp
+  gram   V^TV    128  128  512    1    28.4  comp
+  gram   V^TV    128  128  384    1    27.4  comp
+  gram   V^TV    128  128  256    1    25.6  comp
+  W      V^TC    128  128  256    1    25.6  comp
+  update C-=VY   512  384  128    1    24.8  comp
+  update C-=VY   384  256  128    1    22.6  comp
+  update C-=VY   256  128  128    1    18.3  MEM 
+  gram   V^TV     64   64  512    1    15.1  MEM 
+  W      V^TC     64   64  512    1    15.1  MEM 
+  gram   V^TV     64   64  384    1    14.8  MEM 
+  W      V^TC     64   64  384    1    14.8  MEM 
+  gram   V^TV     64   64  256    1    14.2  MEM 
+  W      V^TC     64   64  256    1    14.2  MEM 
+  gram   V^TV     64   64  128    1    12.8  MEM 
+  W      V^TC     64   64  128    1    12.8  MEM 
+  update C-=VY   512   64   64    1    10.2  MEM 
+  update C-=VY   384   64   64    1    10.1  MEM 
+  update C-=VY   256   64   64    1     9.8  MEM 
+  update C-=VY   128   64   64    1     9.1  MEM 
+  ---- GEMM totals: useful 0.24 GFLOP, HBM 9.8 MB/matrix, flop-weighted AI = 24.3 (compute-side)
+       GEMM-shape instances memory-bound: 13/21
+
+================ n=1024 ================
+  panel-kernel launches: 22   apply_block calls: 21   GEMM launches: 63  (= 21x3)
+  kernel           M    N    K  cnt      AI  bound
+  W      V^TC    256  768 1024    1    80.8  comp
+  W      V^TC    256  512  768    1    69.8  comp
+  gram   V^TV    256  256 1024    1    56.9  comp
+  gram   V^TV    256  256  768    1    54.9  comp
+  gram   V^TV    256  256  512    1    51.2  comp
+  W      V^TC    256  256  512    1    51.2  comp
+  update C-=VY  1024  768  256    1    49.5  comp
+  update C-=VY   768  512  256    1    45.2  comp
+  update C-=VY   512  256  256    1    36.6  comp
+  gram   V^TV    128  128  256    1    25.6  comp
+  W      V^TC    128  128  256    1    25.6  comp
+  W      V^TC     64  192  512    1    21.9  comp
+  W      V^TC     64  128  448    1    19.5  MEM 
+  update C-=VY   256  128  128    1    18.3  MEM 
+  gram   V^TV     64   64  512    1    15.1  MEM 
+  gram   V^TV     64   64  448    1    14.9  MEM 
+  gram   V^TV     64   64  384    1    14.8  MEM 
+  W      V^TC     64   64  384    1    14.8  MEM 
+  W      V^TC     32  224 1024    1    13.6  MEM 
+  W      V^TC     32  224  768    1    13.5  MEM 
+  W      V^TC     32  192  992    1    13.3  MEM 
+  W      V^TC     32  192  736    1    13.2  MEM 
+  update C-=VY   512  192   64    1    13.0  MEM 
+  W      V^TC     32  160  960    1    13.0  MEM 
+  W      V^TC     32  160  704    1    12.8  MEM 
+  W      V^TC     32  128  928    1    12.5  MEM 
+  W      V^TC     32  128  672    1    12.3  MEM 
+  update C-=VY   448  128   64    1    12.1  MEM 
+  W      V^TC     32   96  896    1    11.7  MEM 
+  W      V^TC     32   96  640    1    11.6  MEM 
+  W      V^TC     32   64  864    1    10.4  MEM 
+  W      V^TC     32   64  608    1    10.3  MEM 
+  update C-=VY   384   64   64    1    10.1  MEM 
+  gram   V^TV     32   32 1024    1     7.9  MEM 
+  gram   V^TV     32   32  992    1     7.9  MEM 
+  gram   V^TV     32   32  960    1     7.9  MEM 
+  gram   V^TV     32   32  928    1     7.9  MEM 
+  gram   V^TV     32   32  896    1     7.9  MEM 
+  gram   V^TV     32   32  864    1     7.9  MEM 
+  gram   V^TV     32   32  832    1     7.8  MEM 
+  W      V^TC     32   32  832    1     7.8  MEM 
+  gram   V^TV     32   32  768    1     7.8  MEM 
+  gram   V^TV     32   32  736    1     7.8  MEM 
+  gram   V^TV     32   32  704    1     7.8  MEM 
+  gram   V^TV     32   32  672    1     7.8  MEM 
+  gram   V^TV     32   32  640    1     7.8  MEM 
+  gram   V^TV     32   32  608    1     7.8  MEM 
+  gram   V^TV     32   32  576    1     7.8  MEM 
+  W      V^TC     32   32  576    1     7.8  MEM 
+  update C-=VY  1024  224   32    1     7.4  MEM 
+  update C-=VY   768  224   32    1     7.3  MEM 
+  update C-=VY   992  192   32    1     7.3  MEM 
+  update C-=VY   736  192   32    1     7.2  MEM 
+  update C-=VY   960  160   32    1     7.2  MEM 
+  update C-=VY   704  160   32    1     7.1  MEM 
+  update C-=VY   928  128   32    1     7.0  MEM 
+  update C-=VY   672  128   32    1     7.0  MEM 
+  update C-=VY   896   96   32    1     6.8  MEM 
+  update C-=VY   640   96   32    1     6.7  MEM 
+  update C-=VY   864   64   32    1     6.3  MEM 
+  update C-=VY   608   64   32    1     6.3  MEM 
+  update C-=VY   832   32   32    1     5.3  MEM 
+  update C-=VY   576   32   32    1     5.2  MEM 
+  ---- GEMM totals: useful 1.94 GFLOP, HBM 58.1 MB/matrix, flop-weighted AI = 33.4 (compute-side)
+       GEMM-shape instances memory-bound: 51/63
+

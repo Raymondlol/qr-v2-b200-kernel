@@ -1,0 +1,27 @@
+✓ Initialized. View run at 
+https://modal.com/apps/raymxnd/main/ap-6E4Pxk7dFaetA9CjjjEsOS
+✓ Created objects.
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/dreamy-johnson-cc42cd/modal
+│   _deepdive_launchgap.py
+├── 🔨 Created mount 
+│   /Users/raymond/Downloads/SubPY/.claude/worktrees/dreamy-johnson-cc42cd/submi
+│   ssion.py
+└── 🔨 Created function run.
+dev NVIDIA B200 torch 2.11.0+cu128
+
+        case   wall_us    gpu_us   gap_us   gap% launch/it  | category split (% of gpu)
+--------------------------------------------------------------------------------------------------------------
+/usr/local/lib/python3.12/site-packages/torch/profiler/profiler.py:224: UserWarning: Warning: Profiler clears events at the end of each cycle.Only events from the current cycle will be reported.To keep events across cycles, set acc_events=True.
+  _warn_once(
+  n= 176 b=  40     752.0     388.4    363.6  48.4%      41.0  | panel:65 glue:15 solve:12 tf32x3:8
+  n= 352 b=  40    2010.2    1212.8    797.4  39.7%     105.9  | panel:57 solve:14 glue:14 tf32x3:14 cublas:1
+  n= 512 b= 640   12264.6   12036.8    227.7   1.9%     147.8  | panel:44 tf32x3:28 solve:15 glue:12 cublas:1
+None
+  n=1024 b=  60    7504.4    5951.1   1553.3  20.7%     441.8  | panel:49 glue:18 solve:17 cublas:16
+
+READ: large gap% (GPU idle waiting on CPU dispatch) => LAUNCH-bound => fewer-launches is the lever
+      (the regime where implicit-V's op/launch cut won on Modal). small gap% => GPU-bound (roofline applies).
+Stopping app - local entrypoint completed.
+✓ App completed. View run at 
+https://modal.com/apps/raymxnd/main/ap-6E4Pxk7dFaetA9CjjjEsOS
