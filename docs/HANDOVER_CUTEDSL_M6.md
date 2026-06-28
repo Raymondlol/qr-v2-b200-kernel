@@ -1,6 +1,6 @@
 # HANDOVER → CuTe-DSL M6 async warp-spec engine (2026-06-28 session)
 
-> Read after `docs/HANDOVER_CUTEDSL_M3.md`. Branch `claude/gallant-newton-bf3770`. Comp ends 2026-06-30.
+> Read after `archive/docs/HANDOVER_CUTEDSL_M3.md`. Branch `claude/gallant-newton-bf3770`. Comp ends 2026-06-30.
 > Companion: auto-memory `cutedsl-m3c-validated-primitives.md` (the durable, fuller record).
 
 ## §0 — STATE (one line)

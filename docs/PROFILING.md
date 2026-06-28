@@ -78,7 +78,7 @@ serial reflector-reduction chain** (SHFL-heavy), not FMA-throughput-bound, not a
 - All limiter = `regs`. Fine at n≤512 (640 CTAs over 148 SMs hide latency ACROSS CTAs), but it's
   exactly why the panel **can't co-reside** with a tcgen05 trailing worker on one SM: at 255
   regs/8 warps it already owns the 64K register file. The `gluon-regfile-panel` MAGMA rowmagma
-  panel at **108 regs / 0 spills** is the structural fix (see `docs/STAGE1_PROGRESS.md`).
+  panel at **108 regs / 0 spills** is the structural fix (see `archive/docs/STAGE1_PROGRESS.md`).
 
 ## 6. SASS instruction mix
 - **Panel** (`_panel_kernel` 255r): ~**63% addressing/predication+misc**, **warp-reduce (SHFL) 154

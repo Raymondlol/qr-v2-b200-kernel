@@ -260,7 +260,7 @@ if _HAS_TRITON:
 def _solve_tri_fp32(Mt, W):
     # Force the compact-WY triangular solve to true fp32: with global tf32 on, cuBLAS
     # trsm runs it in tf32 and that op DOMINATES the mixed@640 residual (margin 1.9x ->
-    # 800x when fp32). Cheap (RHS is b wide). See docs/FP8_SESSION_PROGRESS.md.
+    # 800x when fp32). Cheap (RHS is b wide). See archive/docs/FP8_SESSION_PROGRESS.md.
     prev = torch.backends.cuda.matmul.allow_tf32
     torch.backends.cuda.matmul.allow_tf32 = False
     try:
