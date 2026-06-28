@@ -12,7 +12,7 @@
 
 # CUTLASS cute-dsl Port Design — qr_v2 Warp-Specialized Persistent QR Engine
 
-Target board: GPU MODE **qr_v2** (B200). Current best **V10 = 5343µs** (fused single-CTA Triton, pending official confirm; main = V9 5791µs). Leader **1292µs**. This document drives a multi-day cute-dsl build whose ONLY available lever is the **panel↔trailing overlap** the register wall denied us in Gluon.
+Target board: GPU MODE **qr_v2** (B200). Current best **~4247µs** (4ms-level, id 840028, Triton path; supersedes V10 5343µs / id 838292; main = V9 5791µs). Leader **1292µs**. This document drives a multi-day cute-dsl build whose ONLY available lever is the **panel↔trailing overlap** the register wall denied us in Gluon.
 
 ---
 
