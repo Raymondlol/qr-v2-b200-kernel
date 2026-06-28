@@ -51,6 +51,24 @@ def run_candidate(script: str):
     return out
 
 
+@app.function(gpu="B200", image=LAB, timeout=240)
+def run_candidate_quick(script: str):
+    """Same as run_candidate but with a HARD 150s subprocess kill — for M6 async-ring debug where a
+    pipeline deadlock would otherwise spin to the full container timeout (1200s = expensive). A deadlock
+    here costs ~150s instead. Use for cute_apply_gemm1_async.py and other warp-spec ring iterations."""
+    import subprocess, sys
+    try:
+        p = subprocess.run([sys.executable, script], cwd="/work", capture_output=True, text=True,
+                           timeout=150)
+        out = p.stdout + "\n--- STDERR (tail) ---\n" + p.stderr[-6000:]
+    except subprocess.TimeoutExpired as e:
+        _o = e.stdout.decode("utf-8", "ignore") if isinstance(e.stdout, bytes) else (e.stdout or "")
+        _e = e.stderr.decode("utf-8", "ignore") if isinstance(e.stderr, bytes) else (e.stderr or "")
+        out = _o + "\n!!! KERNEL DEADLOCK / HANG (killed at 150s) !!!\n" + _e[-3000:]
+    print(out, flush=True)
+    return out
+
+
 @app.function(gpu="B200", image=EVAL, timeout=600)
 def info():
     """Introspection ONLY (no GPU codegen -> cannot SIGABRT from a kernel bug). Prints the AUTHORITATIVE
