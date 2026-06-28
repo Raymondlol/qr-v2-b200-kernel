@@ -1,4 +1,4 @@
-# === SubmissionV9 = V5 + glue fusion (M-builder + V-builder + M^T-no-transpose) — OFFICIAL 5791us CONFIRMED (V5 5915, -2.1%, best) ===
+# === SubmissionV10-sub5 (fused32/ib32/nw2) = OFFICIAL ~4247us (id 840028, 4ms-level) = CURRENT BEST. V10 + route CUDA n<=64/B>16 to the fused Triton QR kernel (IB=32,nw=2) instead of geqrf (b20-n32 dense 318->30us). Built on V9 (V5+glue fusion). Snapshot: milestones/submissionV10sub5_fused32_ib32_nw2_official4247.py ===
 # Phase 1a proxy: ib=64 for n=512 (fused-panel route, fewer narrow updates).
 # qr_v2 submission: batched compact-Householder QR for B200. (n=2048 routed to
 # custom one-CTA panel + warps; n=4096 to cuSOLVER.) Validated 22/22.
@@ -30,6 +30,129 @@ try:
     _HAS_TRITON = True
 except Exception:
     _HAS_TRITON = False
+
+
+# ===================== FUSED one-shot kernel (n<=512 path) =====================
+# ONE CTA factors ONE [n,n] matrix end-to-end, in-kernel, serial: per sub-panel
+# { rowmagma-style factor -> in-kernel LARFT T16 -> compact-WY 2-GEMM apply }.
+# One launch, no host loop, no relaunch. Collapses V9's ~32 per-sub-panel kernel
+# launches + batched-apply round-trips into a single kernel -> kills the 40-48%
+# small-n launch-idle. tf32x3 throughout (n<=512 precision floor).
+if _HAS_TRITON:
+    @triton.jit
+    def _fused_qr_k(Hptr, tauptr, sb, sr, sc, stb,
+                    N: tl.constexpr, IB: tl.constexpr, BN: tl.constexpr,
+                    BM: tl.constexpr, BW: tl.constexpr):
+        bid = tl.program_id(0)
+        base = Hptr + bid * sb
+        rar = tl.arange(0, BN)
+        car = tl.arange(0, IB)
+        ii = tl.arange(0, IB)
+        c0 = 0
+        while c0 < N:
+            M = N - c0
+            prow = c0 + rar
+            pcol = c0 + car
+            tmask = prow < N
+            tptr = base + prow[:, None] * sr + pcol[None, :] * sc
+            tile = tl.load(tptr, mask=tmask[:, None], other=0.0)
+            for jj in range(IB):
+                colj = tl.sum(tl.where(car[None, :] == jj, tile, 0.0), axis=1)
+                alpha = tl.sum(tl.where(rar == jj, colj, 0.0))
+                xnorm2 = tl.sum(tl.where(rar > jj, colj * colj, 0.0))
+                normfull = tl.sqrt(alpha * alpha + xnorm2)
+                sgn = tl.where(alpha >= 0.0, 1.0, -1.0)
+                beta = -sgn * normfull
+                need = xnorm2 > 0.0
+                scale = tl.where(need, 1.0 / (alpha - beta), 0.0)
+                tau_jj = tl.where(need, (beta - alpha) / beta, 0.0)
+                v = tl.where(rar > jj, colj * scale, 0.0)
+                v = tl.where(rar == jj, 1.0, v)
+                w = tl.sum(v[:, None] * tile, axis=0)
+                upd = tile - tau_jj * (v[:, None] * w[None, :])
+                tile = tl.where(car[None, :] > jj, upd, tile)
+                diagval = tl.where(need, beta, alpha)
+                newcol = tl.where(rar > jj, colj * scale, colj)
+                newcol = tl.where(rar == jj, diagval, newcol)
+                tile = tl.where(car[None, :] == jj, newcol[:, None], tile)
+                tl.store(tauptr + bid * stb + c0 + jj, tau_jj)
+            tl.store(tptr, tile, mask=tmask[:, None])
+            tl.debug_barrier()
+            if c0 + IB < N:
+                tau_vec = tl.load(tauptr + bid * stb + c0 + ii)
+                G = tl.zeros((IB, IB), dtype=tl.float32)
+                mb = 0
+                while mb < M:
+                    lp = mb + tl.arange(0, BM)
+                    gr = c0 + lp
+                    rmask = gr < N
+                    vtptr = base + (c0 + car)[:, None] * sc + gr[None, :] * sr
+                    vt_raw = tl.load(vtptr, mask=rmask[None, :], other=0.0)
+                    vt = tl.where(lp[None, :] > car[:, None], vt_raw,
+                                  tl.where(lp[None, :] == car[:, None], 1.0, 0.0))
+                    vptr = base + gr[:, None] * sr + (c0 + car)[None, :] * sc
+                    v_raw = tl.load(vptr, mask=rmask[:, None], other=0.0)
+                    vv = tl.where(lp[:, None] > car[None, :], v_raw,
+                                  tl.where(lp[:, None] == car[None, :], 1.0, 0.0))
+                    G += tl.dot(vt, vv, input_precision="tf32x3")
+                    mb += BM
+                t0 = tl.sum(tl.where(ii == 0, tau_vec, 0.0))
+                T = tl.where((ii[:, None] == 0) & (ii[None, :] == 0), t0, 0.0)
+                for i in range(1, IB):
+                    ti = tl.sum(tl.where(ii == i, tau_vec, 0.0))
+                    gcol = tl.sum(tl.where(ii[None, :] == i, G, 0.0), axis=1)
+                    z = tl.where(ii < i, gcol, 0.0)
+                    mvec = tl.sum(T * z[None, :], axis=1)
+                    newc = tl.where(ii < i, -ti * mvec, tl.where(ii == i, ti, 0.0))
+                    T = tl.where(ii[None, :] == i, newc[:, None], T)
+                Tt = tl.trans(T)
+                nb = c0 + IB
+                while nb < N:
+                    qcol = nb + tl.arange(0, BW)
+                    cmask_n = qcol < N
+                    W1 = tl.zeros((IB, BW), dtype=tl.float32)
+                    mb = 0
+                    while mb < M:
+                        lp = mb + tl.arange(0, BM)
+                        gr = c0 + lp
+                        rmask = gr < N
+                        vtptr = base + (c0 + car)[:, None] * sc + gr[None, :] * sr
+                        vt_raw = tl.load(vtptr, mask=rmask[None, :], other=0.0)
+                        vt = tl.where(lp[None, :] > car[:, None], vt_raw,
+                                      tl.where(lp[None, :] == car[:, None], 1.0, 0.0))
+                        cptr = base + gr[:, None] * sr + qcol[None, :] * sc
+                        Ct = tl.load(cptr, mask=rmask[:, None] & cmask_n[None, :], other=0.0)
+                        W1 += tl.dot(vt, Ct, input_precision="tf32x3")
+                        mb += BM
+                    W2 = tl.dot(Tt, W1, input_precision="tf32x3")
+                    mb = 0
+                    while mb < M:
+                        lp = mb + tl.arange(0, BM)
+                        gr = c0 + lp
+                        rmask = gr < N
+                        vptr = base + gr[:, None] * sr + (c0 + car)[None, :] * sc
+                        v_raw = tl.load(vptr, mask=rmask[:, None], other=0.0)
+                        vv = tl.where(lp[:, None] > car[None, :], v_raw,
+                                      tl.where(lp[:, None] == car[None, :], 1.0, 0.0))
+                        delta = tl.dot(vv, W2, input_precision="tf32x3")
+                        cptr = base + gr[:, None] * sr + qcol[None, :] * sc
+                        full = rmask[:, None] & cmask_n[None, :]
+                        Cold = tl.load(cptr, mask=full, other=0.0)
+                        tl.store(cptr, Cold - delta, mask=full)
+                        mb += BM
+                    nb += BW
+            tl.debug_barrier()
+            c0 += IB
+
+    def _fused_qr(A, IB=16, BM=64, BW=64, nw=4):
+        B, n, _ = A.shape
+        H = A.clone().contiguous()
+        tau = torch.zeros(B, n, device=A.device, dtype=A.dtype)
+        sb, sr, sc = H.stride()
+        BN = triton.next_power_of_2(n)
+        _fused_qr_k[(B,)](H, tau, sb, sr, sc, tau.stride(0),
+                          N=n, IB=IB, BN=BN, BM=BM, BW=BW, num_warps=nw)
+        return H, tau
 
 
 if _HAS_TRITON:
@@ -421,8 +544,21 @@ def custom_kernel(data):
             except Exception:
                 return torch.geqrf(A)
         return torch.geqrf(A)
+    if _HAS_TRITON and n <= 64 and B > 16:
+        try:
+            return _fused_qr(A, IB=32, nw=2)
+        except Exception:
+            pass
     if _use_geqrf(B, n):
         return torch.geqrf(A)
+    # FUSED one-shot kernel wins where the GPU is well-fed: small-n (light per-matrix,
+    # kills launch-idle) OR high-batch (enough CTAs to fill 148 SMs). n=352 b=40 loses
+    # (only 40 CTAs AND heavy BN=512 work) -> V9's all-SMs batched applies win there.
+    if _HAS_TRITON and (n <= 256 or (n <= 512 and B >= 128)):
+        try:
+            return _fused_qr(A)
+        except Exception:
+            pass                   # fall through to V9 host-driven path
     _BIG_X3 = (n <= 512)           # tf32x3 fused for n<=512; 1xTF32 for n>=1024
     try:
         return _factor_custom(A)

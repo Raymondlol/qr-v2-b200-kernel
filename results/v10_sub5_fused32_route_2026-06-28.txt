@@ -1,0 +1,74 @@
+V10 sub-5ms route pass (2026-06-28 Asia/Shanghai)
+==================================================
+
+Target
+------
+Leaderboard reference: 1.3ms-class geomean.
+Immediate gate: get a correctness-clean candidate consistently below 5ms.
+
+Candidate
+---------
+experiments/v10_sub5_fused32_ib32_nw2.py
+
+Change
+------
+V10's _use_geqrf(batch, n) sends n <= 64 to torch.geqrf, which makes the official
+b20 n32 dense case pay a cuSOLVER path cost around 318-324us.
+
+The candidate routes CUDA n <= 64, B > 16 through the existing one-shot Triton
+fused QR kernel with IB=32, nw=2:
+
+  if _HAS_TRITON and n <= 64 and B > 16:
+      return _fused_qr(A, IB=32, nw=2)
+
+All other cases remain on the existing V10 paths.
+
+Validation
+----------
+Local:
+  python -m py_compile experiments/v10_sub5_fused32_ib32_nw2.py
+  grep -niE 'stream|graph' experiments/v10_sub5_fused32_ib32_nw2.py
+  result: syntax OK, scanner words empty.
+
+Modal correctness:
+  /Users/raymond/Downloads/SubPY/.modalenv/bin/modal run modal_lab.py --mode correctness --subs "experiments/v10_fused_baseline.py,experiments/v10_sub5_fused32_ib32_nw2.py"
+
+  experiments_v10_fused_baseline.py:          PASS 22/22
+  experiments_v10_sub5_fused32_ib32_nw2.py:  PASS 22/22
+
+Modal compare, final clean candidate file:
+  /Users/raymond/Downloads/SubPY/.modalenv/bin/modal run modal_lab.py --mode compare --subs "experiments/v10_fused_baseline.py,experiments/v10_sub5_fused32_ib32_nw2.py"
+
+  baseline geomean:  4918.0us
+  candidate geomean: 4035.4us
+  speedup:           1.219x
+  significant wins:  b20 n32 dense -288us
+
+  b20 n32 dense:
+    V10 baseline: 317.9us
+    candidate:     30.0us
+
+Prior repeated comparisons
+--------------------------
+Route-only n32 experiments reproduced the same structural win:
+
+  v10_route_fused32_nw8:
+    4915.3us -> 4082.1us geomean, b20 n32 dense 317.7us -> 34.3us
+
+  v10_route_fused32_ib32_nw2:
+    5230.8us -> 4346.4us geomean, b20 n32 dense 323.8us -> 39.7us
+
+  v10_route_fused32_ib32_nw2 vs n32_nw8 direct:
+    4306.9us -> 4235.3us geomean, b20 n32 dense 42.0us -> 37.0us
+
+Read
+----
+This is a real routing win, not a fragile PTX/SASS micro-tune. It replaces a costly
+small-n geqrf path with the already-correct one-shot fused QR kernel. The final
+clean file got to 4.035ms in the Modal lab, so the immediate sub-5ms gate is met.
+
+This does not explain or close the 1.3ms-class leaderboard gap. The CUTE
+profiler/PTX/SASS pass in results/cute_v10_prof_asm_2026-06-28.txt showed that the
+current CuTe M3d_NB8 path is 30x slower than V10 at B=20,n=128 despite lower regs
+and no spills. The next load-bearing step for the 1.3ms route is still a real
+tcgen05/TMEM TF32x3 far-apply, not more scalar warp scheduling polish.
