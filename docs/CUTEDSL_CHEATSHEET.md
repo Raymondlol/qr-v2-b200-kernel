@@ -197,7 +197,7 @@ a = from_dlpack(torch_a, assumed_align=16).mark_layout_dynamic()   # [SRC runtim
 |---|---|
 | `thread_idx()`, `block_idx()`, `block_dim()`, `grid_dim()` | 3-tuple of `Int32` |
 | `warp_idx()`, `lane_idx()` | `Int32` |
-| `make_warp_uniform(x)` | **REQUIRED** before branching on `warp_idx` (uniformizes); FA4 `warp_idx = cute.arch.make_warp_uniform(cute.arch.warp_idx())` |
+| `make_warp_uniform(x)` | required-by-convention before branching on `warp_idx` (uniformizes); FA4 `warp_idx = cute.arch.make_warp_uniform(cute.arch.warp_idx())`. (The omission-fault is empirical/unconfirmed — §7.1 tags it verify-on-B200.) |
 | `cluster_dim()/cluster_idx()/block_idx_in_cluster()` | cluster geometry |
 | `sync_threads()` | `__syncthreads`; gives cross-warp gmem visibility |
 | `barrier(barrier_id=None, number_of_threads=None)` | named barrier arrive+wait; `barrier_arrive(...)` = arrive-only |
@@ -606,7 +606,7 @@ The accumulator lives in TMEM; you move it to/from registers with dedicated `tcg
 | `Ld16x256bOp` / `St16x256bOp` | (16, 256) | widest |
 | `Ld16x32bx2Op` / `St16x32bx2Op` | (16, 32)×2 | |
 
-Each takes `repeat: tcgen05.Repetition` (`x1…x128`) and `pack: tcgen05.Pack` (`PACK_16b_IN_32b` or `NONE`). [VERIFIED — `tcgen05/copy.py`, `get_tmem_copy_properties`]
+Each takes `repeat: tcgen05.Repetition` (members `x1…x128`) and `pack: tcgen05.Pack` (`PACK_16b_IN_32b` or `NONE`). [VERIFIED — `tcgen05/copy.py`, `get_tmem_copy_properties`] ⚠️ **Footgun:** this cheatsheet uses the callable-int form `tcgen05.Repetition(n)` (e.g. `Repetition(32)`); the enum-member form `tcgen05.Repetition.x64` (used once in §5.5) is **unverified** — confirm which the wheel accepts before relying on it.
 
 **`make_tmem_copy`** builds the tiled copy; **`sm100_utils.get_tmem_load_op(...)`** auto-selects the best load atom. Canonical TMEM→RMEM (t2r) read-back — `sm100_hd256_2cta_fmha_forward.py:1547`:
 ```python
@@ -724,7 +724,7 @@ qk_tiled_mma = sm100_utils.make_trivial_tiled_mma(
     a_dtype, a_major, b_major, acc_dtype, cta_group, mma_tiler_mn[:2])
 # A-from-TMEM variant (P-operand lives in TMEM):
 pv_tiled_mma = sm100_utils.make_trivial_tiled_mma(
-    v_dtype, OperandMajorMode.K, v_major, pv_acc_dtype, cta_group, pv_tiler[:2],
+    v_dtype, cute.nvgpu.OperandMajorMode.K, v_major, pv_acc_dtype, cta_group, pv_tiler[:2],
     tcgen05.OperandSource.TMEM)
 ```
 Full helper signature (VERIFIED): `make_trivial_tiled_mma(a_dtype, b_dtype, a_leading_mode, b_leading_mode, acc_dtype, cta_group, mma_tiler_mn, a_source=OperandSource.SMEM)`. The legacy single-`ab_dtype` overload is deprecated.
@@ -763,7 +763,7 @@ def gemm(tiled_mma, acc, tCrA, tCrB, zero_init=False):
 
 **Execution-model rules (do not get these wrong):**
 - `cute.gemm` (→ `tcgen05.mma`) is **async** and must be issued **warp-uniform**. **Do NOT wrap it in `elect_one()`** — the compiler handles single-thread issue; wrapping deadlocks. (Same rule as `cute.copy(TMA...)`.)
-- To make a dependent reader (epilogue, next stage) observe completion, signal an mbarrier with **`tcgen05.commit(mbar_ptr, mask, cta_group)`** — and this **MUST** be `elect_one`-guarded (else 32× redundant commits → phase desync → deadlock). This is the single most load-bearing primitive for hand-rolled rings (see §5.6). `tcgen05.commit(mbar, mask=None, cta_group=ONE)` is exactly what `PipelineUmmaAsync.producer_commit` calls internally.
+- To make a dependent reader (epilogue, next stage) observe completion, signal an mbarrier with **`tcgen05.commit(mbar_ptr, mask, cta_group)`** — and this **MUST** be `elect_one`-guarded (else 32× redundant commits → phase desync → deadlock). This is the single most load-bearing primitive for hand-rolled rings (see §5.6). `tcgen05.commit(mbar, mask=None, cta_group=ONE)` is exactly what `PipelineUmmaAsync.producer_commit` calls internally. *(The exact DSL spelling was not found verbatim in docs/source — verify via `dir(cutlass.cute.nvgpu.tcgen05)` on the wheel; the project calls it `tcgen05.commit(mbar)` empirically.)*
 - TMEM ld/st completion: PTX `tcgen05.wait::ld` / `wait::st`. Cross-thread ordering around TMEM: `cute.arch.fence_view_async_tmem_store()` after a TMEM write (before signalling), `cute.arch.fence_view_async_tmem_load()` after reading TMEM into registers (before reuse/release). After an SMEM write that UMMA will read: `cute.arch.fence_view_async_shared()`.
 
 ---
@@ -787,7 +787,7 @@ When the high-level path isn't enough, FA4 hand-rolls the raw `tcgen05.mma` inli
 - **FP16/BF16/FP8 all accumulate in FP32** (FP16 may use F16 acc but you almost never want to). This is why **fp16x3 is *not* a speed win over tf32x3** on this hardware: fp16 with fp32-accumulate runs at the TF32 rate.
 - **TMEM accumulator persists across the K-loop.** You allocate the TMEM tensor once, run the whole K-loop of `cute.gemm` calls accumulating into it, then read it back. The accumulator is live in TMEM the entire loop — no register spill.
 
-**TMEM budget / the occupancy wall** (VERIFIED, `cute/arch/tmem.py`): max alloc = **512 columns** (`TMEM_MAX_ALLOC_COLUMNS_MAP["sm_100"] == 512`); min = 32; alloc count must be **a multiple of 32 AND a power of two**. Geometry is 128 lanes × 512 cols of 32-bit ≈ 256 KB/SM. A `[128,256]` F32 accumulator = 256 columns; a full 512-column acc monopolizes TMEM → **1 CTA/SM**. This is the "NBP≥64 / 1-CTA-per-SM" wall behind the project's ~2.0× serial-tcgen05 floor at n≤512: TMEM is a single per-SM resource, so a big accumulator forecloses co-residency. To get >1 CTA/SM, shrink the acc (fewer columns) or sub-allocate via `TmemBufferPool`.
+**TMEM budget / the occupancy wall** (VERIFIED, `cute/arch/tmem.py`): max alloc = **512 columns** (`TMEM_MAX_ALLOC_COLUMNS_MAP["sm_100"] == 512`); min = 32; alloc count must be **a multiple of 32 AND a power of two**. Geometry is 128 lanes × 512 cols of 32-bit ≈ 256 KB/SM. A `[128,256]` F32 accumulator = 256 columns; a full 512-column acc monopolizes TMEM → **1 CTA/SM**. This is the *column-budget* wall: TMEM is a single per-SM resource, so a full-width accumulator forecloses co-residency → 1 CTA/SM. It is **distinct** from the separate **NBP≥64 row wall** (the `[NBP,BW]` acc tile pads to 64 rows minimum → the ~2.0× serial-tcgen05 floor at n≤512); both bite (see §3.7). To get >1 CTA/SM, shrink the acc (fewer columns) or sub-allocate via `TmemBufferPool`.
 
 **Allocate / read-back** (VERIFIED): `tmem = utils.TmemAllocator(...)`; `tmem.allocate(ncols)` (allocator warp only) → `tmem.wait_for_alloc()` (NamedBarrier so all warps see the base ptr — **must precede `retrieve_ptr` in every warp that reads acc**, else garbage pointer → fault) → `tmem.retrieve_ptr(Float32)`. TMEM→RMEM uses `tcgen05.ld` atoms (`Ld32x32bOp`, `Ld16x{64,128,256}bOp`) built with `tcgen05.make_tmem_copy(atom, tmem_tensor)`; the performant atom is auto-picked by `sm100_utils.get_tmem_load_op(...)`. Read the acc back in **FP32** (never read a tf32 acc as the output dtype — it rounds to ~19 bits). Repo readback, `cute_gemm_tf32x3.py:106`:
 ```python
@@ -1349,7 +1349,7 @@ Root cause (definitively diagnosed via `experiments/cute_pipesrc.py`): the **`pr
 if cute.arch.lane_idx() == 0:
     tcgen05.commit(empty_mbar + s)      # UMMA-completion → frees the stage
 ```
-(`tcgen05.commit(mbar, mask=None, cta_group=ONE)` is the load-bearing primitive — UMMA arrives on `mbar` when the mma-group completes; it's what `PipelineUmmaAsync.producer_commit` calls internally.) **Conversely:** `cute.gemm` / `tcgen05.mma` and `cute.copy(TMA...)` **self-elect** — do **NOT** wrap them in `elect_one()`, that deadlocks (cheatsheet L226-230). Rule of thumb: **`cute.gemm` = warp-uniform, no elect; `tcgen05.commit` = needs elect-one.**
+(`tcgen05.commit(mbar, mask=None, cta_group=ONE)` is the load-bearing primitive — UMMA arrives on `mbar` when the mma-group completes; it's what `PipelineUmmaAsync.producer_commit` calls internally. *Exact DSL spelling unconfirmed — verify via `dir(cutlass.cute.nvgpu.tcgen05)`.*) **Conversely:** `cute.gemm` / `tcgen05.mma` and `cute.copy(TMA...)` **self-elect** — do **NOT** wrap them in `elect_one()`, that deadlocks (cheatsheet L226-230). Rule of thumb: **`cute.gemm` = warp-uniform, no elect; `tcgen05.commit` = needs elect-one.**
 
 **TRAP → producer `mbarrier_init` count ≠ actual arriving thread count** → barrier never completes or completes early (phase skew). Set `NPROD` = exact number of producer threads that will `mbarrier_arrive` per stage (the validated ring uses 96 = 3 warps).
 
@@ -1645,3 +1645,342 @@ Validated EXACT (maxabs 0.0 on the split; GEMM rel 8.25e-7 / 2.89e-6). **Three t
 
 ### Strongest parts (keep as-is)
 The tf32x3 bit-AND split + 3 dead alternatives (§5.6/§8.2/§9.5), the `PipelineTmaUmma.producer_commit`-is-`pass` deadlock diagnosis (§6.1/§6.4/§8.3), the hand-rolled mbarrier ring with elect-one `tcgen05.commit` + prime + init-once/no-reinit heisenbug (§6.5/§8.5/§9.4), the four-fence table (§4.8/§9.2), and the elect-one asymmetry (`cute.gemm` no-elect vs `tcgen05.commit` must-elect) are all faithful to the pool, correctly hedged where the pool hedges, and are the highest-value content. The §3.9/§8/§9 per-section "verify-on-B200" confidence lines are exactly the right discipline for a scarce-info audience.
+
+---
+
+## 11. Addendum — gap-fill (cp.async, C++↔DSL map, benchmarking, vectorization, launch flags)
+
+> Added 2026-06-28 to close the gaps the §10 critic flagged. Same discipline: FA4 file:line examples, cited docs, "(verify on B200)" on anything unconfirmed.
+
+### 11.1 cp.async producer ring + launch-flag caution
+
+cute-DSL 4.5.2 / Blackwell sm100. cp.async (non-bulk) is the **sm80/sm90-era** g2s fill path; on sm100 it's the documented fallback when you can't/don't want TMA (e.g. gather loads, irregular tiles, no descriptor). All FA4 file:line refs below use the SPACE-containing path `/Users/raymond/Downloads/flash-attention-main 2/`.
+
+#### A) cp.async producer ring
+
+**Copy atom — `cpasync.CopyG2SOp`.** Import is `from cutlass.cute.nvgpu import cpasync`. Build a 128-bit g2s atom; `CopyG2SOp` takes an optional `cache_mode=cpasync.LoadCacheMode.{ALWAYS|GLOBAL}` (default `ALWAYS`; `GLOBAL` = `.cg`, skip-L1). Source/dest **must** be gmem→smem.
+
+```python
+# get_copy_atom — copy_utils.py:42-48 (toggle is_async picks cp.async vs universal)
+copy_op = cpasync.CopyG2SOp() if is_async else cute.nvgpu.CopyUniversalOp()
+atom = cute.make_copy_atom(copy_op, dtype, num_bits_per_copy=min(128, num_elems*dtype.width))
+# real .cg variant — flash_bwd.py:238-242
+atom_async_copy = cute.make_copy_atom(
+    cpasync.CopyG2SOp(cache_mode=cpasync.LoadCacheMode.GLOBAL),
+    self.dtype, num_bits_per_copy=128)
+# tile it across threads — flash_bwd.py:270 / copy_utils.py:81-106 (tiled_copy_1d/2d)
+gmem_tiled_copy_QK = cute.make_tiled_copy_tv(atom_async_copy, tQK_layout, vQKVdO_layout)
+```
+- Definitions: `copy_utils.py:42` `get_copy_atom`, `:65` `copy(..., is_async=...)`, `:81` `tiled_copy_1d`, `:92` `tiled_copy_2d`. `CopyG2SOp`/`LoadCacheMode` live in `cutlass/cute/nvgpu/cpasync/copy.py` (`LoadCacheMode.GLOBAL == .cg`, `ALWAYS` default).
+- The copy itself is just `cute.copy(tiled_copy, gS, sS, pred=...)` (same call as any copy — async-ness is baked into the atom). Predication (`pred=`) handles ragged tiles; cp.async zero-fills masked-out 16B chunks only with the right OOB setup, FA4 predicates explicitly.
+
+**Group commit / wait — `cute.arch.cp_async_commit_group()` / `cute.arch.cp_async_wait_group(N)`.** Manual (non-pipeline) ring. `commit_group()` closes the batch of cp.async issued since the last commit into one *group*; `wait_group(N)` blocks until **at most N** groups remain in flight (so `wait_group(0)` = drain all; `wait_group(1)` = keep 1 stage outstanding = classic 2-stage prefetch).
+```python
+# nvvm_wrappers.py:285 cp_async_commit_group()  /  :295 cp_async_wait_group(n)
+#   "Waits till only a specified numbers of cp.async groups are pending."
+# manual 2-stage prologue — flash_bwd.py:796-819
+self.load_V(...);  cute.arch.cp_async_commit_group()     # group 0
+self.load_K(...);  cute.arch.cp_async_commit_group()     # group 1
+for stage in range(num_stages_Q):
+    load_Q_LSE(m_block+stage, ...); cute.arch.cp_async_commit_group()
+# mainloop consume — flash_bwd.py:896-897
+cute.arch.cp_async_wait_group(1 if num_stages_Q > 1 else 0)  # keep 1 in flight
+cute.arch.barrier()                                          # CTA-wide visibility before MMA
+# tail drain — flash_bwd_postprocess.py:497-498
+cute.arch.cp_async_commit_group(); cute.arch.cp_async_wait_group(0)
+```
+**Note: cp.async commit/wait is group-counted, NOT mbarrier-counted** — `wait_group` has no per-stage phase, so after `wait_group(N)` you still need a `cute.arch.barrier()` (or the pipeline mbarrier, below) before consumers read smem. Do NOT confuse with the *bulk* TMA variants `cp_async_bulk_commit_group()` / `cp_async_bulk_wait_group(n, read=True)` (`nvvm_wrappers.py:305/315`, used at `flash_bwd_mla_sm100.py:1920/1936`) — those are for `cp.async.bulk`/TMA, different instruction class.
+
+**Pipelined path — `cutlass.pipeline.PipelineCpAsync`.** Wraps the group machinery in the standard producer/consumer mbarrier protocol so a cp.async producer warp drives the same `producer_acquire / commit / consumer_wait / release` ring as a TMA pipeline (lets you mix cp.async-fed and TMA-fed stages, or warp-specialize a cp.async loader). Official signature (CUTLASS 4.x docs):
+```python
+# class cutlass.pipeline.PipelineCpAsync(PipelineAsync)
+pipe = cutlass.pipeline.PipelineCpAsync.create(
+    barrier_storage = smem_ptr,        # cute.Pointer to smem mbarrier array
+    num_stages      = STAGES,          # Int32
+    producer_group  = CooperativeGroup(...),   # the cp.async loader warp(s)
+    consumer_group  = CooperativeGroup(...),   # the MMA/compute warp(s)
+    producer_mask   = None,            # optional Int32
+    consumer_mask   = None,            # optional
+    defer_sync      = False,           # optional (verify on B200)
+)
+```
+The cp.async-specific arrive is `arrive_cp_async_mbarrier(stage)` on the pipeline's full sync object — it converts the committed cp.async group's completion into an mbarrier arrival (vs `arrive_and_expect_tx` for TMA). FA4 drives it manually at `flash_bwd_mla_sm100.py:1275-1276`:
+```python
+cute.arch.cp_async_commit_group()
+pipeline_cpasync.sync_object_full.arrive_cp_async_mbarrier(stage)
+```
+FA4 also runs the same protocol with a plain `PipelineAsync` + an explicit `commit_group/wait_group(0)` bracket around `producer_acquire`→copy→`producer_commit` (the cp.async KV gather path): `flash_bwd_mla_dq_dqv_sm100.py:823` `producer_acquire` … `:833-834` `cp_async_commit_group()`+`cp_async_wait_group(0)` … `:840` `producer_commit`. `PipelineAsync.create` arg order is identical (`barrier_storage, num_stages, producer_group, consumer_group, producer_mask, consumer_mask`); `producer_acquire` waits the *empty* mbarrier, `producer_commit` arrives the *full* one (bundled `cutlass/utils/pipeline.py:431/477/488`).
+
+**Minimal cp.async → compute fill recipe (manual ring, no TMA):**
+```python
+atom  = cute.make_copy_atom(cpasync.CopyG2SOp(), dtype, num_bits_per_copy=128)
+tcopy = cute.make_tiled_copy_tv(atom, thr_layout, val_layout)   # copy_utils.py:81-106
+thr   = tcopy.get_slice(tidx)
+gS, sS = thr.partition_S(gmem_tile), thr.partition_D(smem_buf)   # smem_buf: (..., STAGES)
+# --- prologue: issue STAGES-1 groups ---
+for s in range(STAGES - 1):
+    cute.copy(tcopy, gS[..., s], sS[..., s], pred=pred_s)
+    cute.arch.cp_async_commit_group()
+# --- mainloop ---
+for k in range(num_tiles):
+    cute.arch.cp_async_wait_group(STAGES - 2)   # keep STAGES-1 groups outstanding
+    cute.arch.barrier()                          # smem now visible to all consumer threads
+    write = (k + STAGES - 1) % STAGES
+    if k + STAGES - 1 < num_tiles:               # prefetch next
+        cute.copy(tcopy, gS[..., k+STAGES-1], sS[..., write], pred=pred_next)
+    cute.arch.cp_async_commit_group()
+    mma(acc, sS[..., k % STAGES], ...)           # consume current stage
+cute.arch.cp_async_wait_group(0)                 # tail drain
+```
+Pipeline (`PipelineCpAsync`) variant replaces the bare `commit/wait_group+barrier` with `pipe.producer_acquire(pstate)` → `cute.copy(...)` → `cp_async_commit_group()` → `pipe.sync_object_full.arrive_cp_async_mbarrier(pstate.index)` on the producer, and `pipe.consumer_wait(cstate)` / `pipe.consumer_release(cstate)` on the compute side, advancing `PipelineState` each iter.
+
+Caveats: cp.async copies are **16B-granular** (use 128-bit `num_bits_per_copy` for full BW; 32-bit cp.async exists but loses the async benefit). cp.async tops out around HBM rate and has no descriptor/multicast — on sm100, TMA + `arrive_and_expect_tx` is faster and 2-CTA-multicast-capable; reach for cp.async only when the access pattern defeats TMA (gather/scatter, per-row predication) or to avoid descriptor setup in a thin prototype. (`arrive_cp_async_mbarrier` exact spelling — verify on B200; bundled flash-attn 2.8.1 DSL predates `PipelineCpAsync`, so confirm the class import resolves under 4.5.2.)
+
+#### B) Launch-flag caution (`@cute.jit` launch flags)
+
+The DSL kernel launch (`cute.kernel(...).launch(...)` / the `@cute.jit` host launch) exposes two flags that are **traps for the qr_v2 submission**:
+
+- **`cooperative=` — DO NOT USE in a submission.** Official: *"Enables cooperative kernel launch; all thread blocks launch cooperatively with grid-wide synchronization support."* `cooperative=True` lowers to a **cooperative launch** (`cudaLaunchCooperativeKernel` / `grid.sync()` territory). This is exactly the banned class in CLAUDE.md hard-constraint #1: "no cooperative-launch either." It is adjacent to the forbidden `stream`/`graph` substrings (the checker is a static substring scan — also confirm the emitted/wrapper code doesn't literally contain `stream`/`graph`). The hand-rolled atomic cross-CTA barrier (memory note `qr-v2-atomic-grid-barrier`) is the *only* sanctioned cross-CTA sync — it uses `tl.atomic_*` spin, **not** `cooperative=`. Leave `cooperative=False` (default).
+
+- **`use_pdl=` — Programmatic Dependent Launch; interacts with persistent kernels.** Official: *"Enables Programmatic Dependent Launch (PDL) to overlap dependent kernel launches in the same stream."* PDL (Hopper/Blackwell sm90+) lets two same-stream kernels overlap ramp-down/ramp-up via `cudaTriggerProgrammaticLaunchCompletion()` (producer, near exit) + `cudaGridDependencySynchronize()` (consumer, gating conflicting global accesses). Relevance to a **persistent** engine: PDL's win is hiding the launch-to-launch gap between *separate* kernels — a single persistent kernel that already keeps SMs resident across all matrices captures most of that benefit internally, so PDL is largely redundant once you go persistent (and adds a second-kernel + grid-dependency-sync code path). ⚠️ Two submission hazards: (1) the doc text says *"in the same stream"* — using PDL implies a stream, and the helper name / any wrapper may contain the substring `stream`, which trips the static scan; (2) PDL is a multi-kernel-overlap mechanism, orthogonal to the in-kernel `warp_specialize` overlap that the qr_v2 cute-DSL engine actually needs. Default `use_pdl=False`; do not enable it for the per-matrix persistent ring without first grepping the generated module for `stream`/`graph`. (Exact kwarg spelling on the 4.5.2 `.launch()` — verify on B200; reference example: `examples/python/CuTeDSL/blackwell/programmatic_dependent_launch.py`.)
+
+**Cited official docs:**
+- Pipeline API (`PipelineCpAsync`, `producer_acquire`/`commit`, `arrive_cp_async_mbarrier`): https://docs.nvidia.com/cutlass/latest/media/docs/pythonDSL/cute_dsl_api/pipeline.html
+- Launch flags `cooperative=` / `use_pdl=` (CuTe DSL intro): https://docs.nvidia.com/cutlass/latest/media/docs/pythonDSL/cute_dsl_general/dsl_introduction.html
+- PDL semantics (trigger/grid-dependency-sync, Hopper/Blackwell): https://docs.nvidia.com/cutlass/latest/media/docs/cpp/dependent_kernel_launch.html
+- CuTe DSL PDL example: https://github.com/NVIDIA/cutlass/blob/main/examples/python/CuTeDSL/blackwell/programmatic_dependent_launch.py
+- cp.async PTX (commit-group / wait-group): https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-cp-async-commit-group
+
+I have everything needed, including the existing cheatsheet's conventions (VERIFIED tags, the `$CUTLASS_PATH=/opt/cutlass` clone of v4.5.1, the existing C++ atom-name cross-refs at line 713). This is the G9 gap the cheatsheet explicitly flagged. Now I'll write the subsection.
+
+```markdown
+### 11.2 C++ ↔ DSL map, cute.assume vectorization, recast_tensor
+
+Three interop/perf gotchas for porting between CUTLASS C++ and cute-DSL 4.5.2 on Blackwell (sm100), and for unlocking vectorized memory ops. (Closes pool gap **G9** — the DSL↔C++ concept table.)
+
+#### A) CUTLASS C++ ↔ cute-DSL concept map
+
+**Why it matters here:** the eval image clones CUTLASS C++ at tag `v4.5.1` → `/opt/cutlass` with `$CUTLASS_PATH=/opt/cutlass` and **has nvcc** (`nvidia/cuda:12.9.1-devel`), so raw `.cu` / CUTLASS C++ are *deployable* alongside the DSL ([qr_v2 eval env HAS nvcc] — verified vs live kernelbot `main`). **But building in C++ is NOT a capability unlock over the DSL:** the DSL wraps the *same* UMMA/TMA atoms → same PTX, same tcgen05 TMEM 64-row wall → the per-matrix engine is bounded ≈ same either way. Use C++ only as a cross-reading aid (the public DSL examples are sparse; the C++ tutorials at `/opt/cutlass/examples/cute/tutorial/blackwell/0{1..4}_*sm100.cu` are denser). The map below lets a reader who knows one side find the other.
+
+| Concept | CUTLASS C++ spelling | cute-DSL 4.5.2 spelling | Notes |
+|---|---|---|---|
+| Collective mainloop | `cutlass::gemm::collective::CollectiveMma<...>` | no 1:1 class — you hand-write the warp roles / mainloop in `@cute.kernel`; the *building blocks* (TiledMma, pipelines, TMA atoms) are exposed individually | DSL has no `CollectiveBuilder`; you assemble. The `cutlass.utils.sm100` helpers (`make_smem_layout_a/b`, `make_trivial_tiled_mma`, `get_num_tmem_alloc_cols`) cover what the C++ collective auto-does. |
+| Tiled MMA | `cute::make_tiled_mma(MMA_Atom<...>{}, ...)` | `cute.make_tiled_mma(atom)` / `cutlass.utils.sm100.make_trivial_tiled_mma(...)` | same algebra; DSL atom built from the op classes below. |
+| SM100 fp16/bf16 UMMA atom | `SM100_MMA_F16BF16_SS<TA,TB,TC,M,N,...>` (1-SM, `_SS`=A,B both SMEM); 2-SM = `SM100_MMA_F16BF16_2x1SM_SS<...,256,256,...>`; `_TS` = A-from-TMEM | `cute.nvgpu.tcgen05.MmaF16BF16Op(...)` + `OperandSource.{SMEM,TMEM}` + `CtaGroup.{ONE,TWO}` | `_SS`/`_TS` suffix ↔ `OperandSource`; `2x1SM` ↔ `CtaGroup.TWO`. F16/BF16 K=16. |
+| SM100 tf32 UMMA atom (qr_v2 trailing) | `SM100_MMA_TF32_SS<...>` / `_2x1SM_SS` | `cute.nvgpu.tcgen05.MmaTF32Op(...)` + `OperandSource` + `CtaGroup` | TF32×TF32→F32, K=8. This is the qr_v2 tf32x3 GEMM atom (3 passes, rel ~2.89e-6 — [cute-dsl Modal loop]). |
+| Operand major mode | `UMMA::Major::{MN,K}` | `cute.nvgpu.OperandMajorMode.{MN,K}` (the `tcgen05.OperandMajorMode` alias is deprecated) | |
+| SMEM swizzle pattern | `cute::Swizzle<B,M,S>` (e.g. SW128 = `Swizzle<3,4,3>`, B=3 bits / 1024-bit contig) | built into the layout-atom helpers; rarely spelled raw — `cute.make_swizzle(3,4,3)` if needed | SW128/SW64/SW32 = the 3 legal UMMA swizzles. |
+| UMMA SMEM layout atom | `UMMA::Layout_K_SW128_Atom<T>` / `UMMA::Layout_MN_SW128_Atom<T>` (aliased from `GMMA::Layout_*`); fed to `tile_to_shape` | `cutlass.utils.sm100.make_smem_layout_{a,b,epi}(...)` (heuristic-picks atom by majorness+dtype+major-mode size) / `get_smem_store_op`, `get_tmem_load_op` | DSL picks the atom for you; the helper is the recommended path. K-major vs MN-major picks `_K_` vs `_MN_`. |
+| TMEM allocator | `cute::TMEM::Allocator` (1Sm) / 2Sm variant — `#include <cute/arch/tmem_allocator_sm100.hpp>` | `cutlass.utils.TmemAllocator(is_two_cta=False/True)`; under the hood `cute.arch.alloc_tmem` / `dealloc_tmem` / `relinquish_tmem_alloc_permit` | `is_two_cta=True` ↔ 2Sm (uses a cluster-visible mbarrier). Col budget via `get_num_tmem_alloc_cols`. |
+| SMEM allocator | manual `__shared__` / `cute::array_aligned` | `cutlass.utils.SmemAllocator` | recommended DSL interface for dynamic SMEM. |
+| TMEM↔RMEM/SMEM copy | `make_tmem_copy(...)` + tmem copy atoms | `cute.make_tmem_copy(...)` (+ `get_tmem_load_op` / `get_smem_store_op`) | tmem→rmem, rmem→tmem, smem→tmem exposed as copy atoms. |
+| TMA tensor / descriptor | `make_tma_atom(...)` / `cute::make_tma_copy` | `cute.nvgpu.cpasync.{make_tma_tile_atom, tma_partition}` (see FA4 `copy_utils.py:324 tma_get_copy_fn`, `:342 cpasync.tma_partition`) | cluster-multicast atom select ↔ `cluster_shape_to_tma_atom_{A,B,SFB}`. |
+| TMA→UMMA pipeline (Blackwell mainloop) | `cutlass::PipelineTmaUmmaAsync<Stages>` | `cutlass.pipeline.PipelineTmaUmma` | TMA producer → UMMA consumer. |
+| UMMA→async pipeline (accum drain) | `cutlass::PipelineUmmaAsync<Stages>` | `cutlass.pipeline.PipelineUmmaAsync` | UMMA producer → AsyncThread consumer. |
+| Generic / cp.async / TMA-only pipelines | `PipelineAsync`, `PipelineTmaAsync`, `PipelineTransactionAsync` | `cutlass.pipeline.{PipelineAsync, PipelineTmaAsync, PipelineCpAsync}`; state = `PipelineState`; barriers = `MbarrierArray`, `NamedBarrier` | TMA-producer pipelines: `producer_commit` is a no-op (the TMA tx-barrier self-signals — see §near line 575). |
+
+**(verify on B200)** the exact `cutlass.utils` vs `cutlass.utils.sm100` import path for `TmemAllocator`/`SmemAllocator` (docs list them under `cutlass.utils`; 4.5.2 may re-export). The 2-SM TMEM allocator's mbarrier-sync semantics also worth a smoke test.
+
+Sources: [tcgen05 MMA Python (MmaTF32Op/MmaF16BF16Op/OperandSource/CtaGroup)](https://github.com/NVIDIA/cutlass/blob/main/python/CuTeDSL/cutlass/cute/nvgpu/tcgen05/mma.py) · [SM100 utils (make_smem_layout_*, make_trivial_tiled_mma, get_num_tmem_alloc_cols)](https://docs.nvidia.com/cutlass/latest/media/docs/pythonDSL/cute_dsl_api/utils_sm100.html) · [cutlass.pipeline classes](https://docs.nvidia.com/cutlass/latest/media/docs/pythonDSL/cute_dsl_api/pipeline.html) · [mma_traits_sm100.hpp (SM100_MMA_* atoms)](https://github.com/NVIDIA/cutlass/blob/main/include/cute/atom/mma_traits_sm100.hpp) · [Colfax: TMEM GEMM tutorial (`_SS`/`_TS`, `TMEM::Allocator`, UMMA::Layout atoms)](https://research.colfax-intl.com/cutlass-tutorial-writing-gemm-kernels-using-tensor-memory-for-nvidia-blackwell-gpus/) · [NVIDIA blog: CuTe DSL = same atoms as C++](https://developer.nvidia.com/blog/achieve-cutlass-c-performance-with-python-apis-using-cute-dsl/)
+
+#### B) `cute.assume(stride, divby=N)` — the vectorization gate
+
+`cute.assume(value, divby=N)` annotates a **dynamic** scalar (a stride or offset known only at runtime) with the compile-time fact "this is divisible by N." It is **both a correctness gate and a perf gate** for vectorized TMA / `cp.async`:
+
+- **Perf:** TMA and `cp.async.cg` issue 128-bit (16-byte) vector transactions. The compiler will only emit the wide/vectorized copy when it can *prove* the relevant strides are 16-byte aligned. A dynamic stride from `from_dlpack` is opaque → the compiler conservatively falls back to scalar/narrow copies. `assume(..., divby=128//width)` restores the proof → vectorized path.
+- **Correctness:** if you assume a divisibility that the runtime tensor violates, the wide copy reads/writes misaligned → UB/garbage. So the host side must guarantee the alignment (or the assume must be conditional, as FA4 does — keep stride-0 GQA-expand axes as-is).
+
+**FA4 idiom — the canonical "rebuild a tensor with aligned-stride assumptions"** (note the literal SPACE in the path):
+
+`"/Users/raymond/Downloads/flash-attention-main 2/flash_attn/cute/cute_dsl_utils.py"`:
+```python
+# cute_dsl_utils.py:44
+def assume_strides_aligned(t):
+    """Assume all strides except the last are divisible by 128 bits."""
+    divby = 128 // t.element_type.width                      # :50  bits→elems
+    strides = tuple(s if isinstance(s, int) else cute.assume(s, divby=divby)
+                    for s in t.stride[:-1])                  # :51  keep python-int strides as-is
+    return (*strides, t.stride[-1])                          # last (contig) stride untouched
+
+def assume_tensor_aligned(t):                                # :55
+    if t is None: return None
+    return cute.make_tensor(t.iterator,
+        cute.make_layout(t.shape, stride=assume_strides_aligned(t)))   # :59  rebuild w/ assumed strides
+```
+Key details mined from FA4: (1) `divby = 128 // t.element_type.width` — the divisor is in *elements*, computed from the 128-bit target (bf16→8, fp32→4, fp8→16). (2) Only `stride[:-1]` is assumed; the **last (contiguous) stride is left alone**. (3) **Static python-int strides are skipped** (`isinstance(s, int)`) — e.g. stride-0 from GQA `expand`; only runtime (dynamic) strides need the hint. (4) The whole-tensor variant rebuilds via `cute.make_tensor(iterator, make_layout(shape, stride=...))`.
+
+Other live FA4 call sites confirm the same pattern on **offsets**, not just strides — `seqlen_info.py:37` `cute.assume((offset + batch_idx*tile)//tile*tile, divby=tile)` (assert the cu-seqlen offset is tile-aligned), and per-tensor stride hints `divby=64` throughout the sm100 2-CTA bwd kernels (`sm100_hd256_2cta_fmha_backward_dkdvkernel.py:245,2810`). The fwd kernels use the same `divby=128//mX.element_type.width` over `mX.stride[:-1]` (`flash_fwd_mla_sm100.py:394`, `flash_bwd_mla_sm100.py:371`, `flash_fwd_sm100.py:3071`).
+
+**qr_v2 takeaway:** when you `from_dlpack` the batched A/H tensors, wrap their strides with `assume_strides_aligned` before building the TMA/cp.async tiles, or the trailing-GEMM loads silently de-vectorize. **(verify on B200)** that the host always passes 16B-aligned matrices (batch stride too) so the assume is sound.
+
+Sources: FA4 source (mined above) · [CuTe DSL — cute.assume / divby alignment for TMA & cp.async](https://docs.nvidia.com/cutlass/latest/media/docs/pythonDSL/cute_dsl.html) · [cutlass.cute API](https://docs.nvidia.com/cutlass/latest/media/docs/pythonDSL/cute_dsl_api/cute.html)
+
+#### C) `cute.recast_tensor` (tensor-level reinterpret) vs value `.bitcast` — and the fp8-as-uint8 DLPack workaround
+
+Two different reinterpret tools — pick by *what* you're reinterpreting:
+
+| | scope | spelling | use |
+|---|---|---|---|
+| **value `.bitcast`** | one register value (a `cute.Numeric`) | `x.bitcast(Int32)` — and the in-register tf32x3 split idiom `(x.bitcast(Int32) & Int32(-8192)).bitcast(Float32)` (python `&`; **NOT** `cute.bitcast`/`cutlass.and_`) | per-element bit tricks: tf32 hi/lo split, fp32→2×bf16 pack ([cute-dsl M3c validated primitives]) |
+| **`cute.recast_tensor`** | a whole tensor (iterator + layout) | `cute.recast_tensor(src, dtype, swizzle_=None, *, loc, ip)` — reinterprets element type, **adjusts both the iterator pointer type AND the layout** to stay consistent | reinterpret a buffer's element width: fp32-rmem ↔ Int32 for shuffle/vector ops, fp8 view, packed stores |
+
+`cute.recast_tensor(src, dtype)` is the DSL analog of C++ `cute::recast<NewT>(tensor)`. When `sizeof(NewT) != sizeof(OldT)` the **innermost layout extent scales** by the size ratio (e.g. 2×fp32 → 1×Int32 halves that mode), so the new size must divide evenly. FA4 mined examples:
+
+`"/Users/raymond/Downloads/flash-attention-main 2/flash_attn/cute/utils.py"`:
+- `:540–542` (`shuffle_sync`): pack a value into a 1-elem rmem tensor, then `val_i32 = cute.recast_tensor(val, cutlass.Int32)` to shuffle it as 32-bit words. **Gotcha (commented at :539): "need stride 1 and not 0 for recast_tensor to work"** — a stride-0 (broadcast) layout can't be recast; the contiguous mode must have unit stride.
+- `:673` (fp32→fp16x2 convert): `dst_i32 = cute.recast_tensor(dst, cutlass.Int32)` then write 2 packed fp16 per Int32 via `cvt_f16x2_f32` — i.e. recast the fp16 dst as Int32 so each store lands a packed `.b32`.
+
+**The fp8-as-uint8 DLPack workaround** (`cute_dsl_utils.py:62 to_cute_tensor`, ~:66–84) — *not* a `recast_tensor`, but the adjacent "reinterpret at the boundary" trick: torch 2.9.x can't export fp8 via DLPack, so FA4 exports the raw bytes as `uint8` and then **overwrites the cute tensor's `element_type`** to the true fp8 type:
+```python
+# cute_dsl_utils.py:69
+if t.dtype in (torch.float8_e4m3fn, torch.float8_e5m2):
+    tensor = from_dlpack(t.view(torch.uint8).detach(), assumed_align=..., enable_tvm_ffi=...)  # :70 bytes as u8
+    tensor.element_type = (cutlass.Float8E4M3FN if t.dtype == torch.float8_e4m3fn
+                           else cutlass.Float8E5M2)                                             # :75 retag → fp8
+```
+This works because fp8 and uint8 are both 1 byte (no layout rescale needed) — you're just relabeling the element type, so DLPack's type-system gap is bypassed. (FA4 note at :66: torch 2.11 nightly supports fp8 DLPack directly; the project's eval uses torch 2.12, so a direct fp8 export may now work — but the retag trick is the safe fallback.) **(verify on B200)** whether torch 2.12 on the eval image exports fp8 via DLPack natively or still needs the uint8 retag.
+
+**qr_v2 caveat:** fp8 is accuracy-viable but **speed-dead** for the K-poor batched shapes here ([qr_v2 solve-tf32 floor artifact]) — the workaround is documented for completeness; the deployable path is tf32x3, where `recast_tensor`-to-Int32 is the relevant tool (packed stores / shuffles), and the *value* `.bitcast` split is the tf32x3 hi/lo machinery.
+
+Sources: [cute.recast_tensor signature & semantics](https://docs.nvidia.com/cutlass/latest/media/docs/pythonDSL/cute_dsl_api/cute.html) · [CuTe C++ recast (03_tensor)](https://docs.nvidia.com/cutlass/latest/media/docs/cpp/cute/03_tensor.html) · FA4 `utils.py` / `cute_dsl_utils.py` (mined above)
+```
+
+Key reference files (all absolute paths):
+- FA4 mined: `/Users/raymond/Downloads/flash-attention-main 2/flash_attn/cute/cute_dsl_utils.py` (lines 44-59 assume idiom, 62-84 fp8 DLPack workaround), `.../utils.py` (lines 539-545, 660-677 recast_tensor), `.../copy_utils.py` (line 324/342 TMA partition).
+- The cheatsheet this slots into: `/Users/raymond/Downloads/SubPY/.claude/worktrees/vibrant-proskuriakova-9a15c8/docs/CUTEDSL_CHEATSHEET.md` (this closes the G9 gap flagged at line 1634; existing C++ atom cross-refs at line 713).
+
+I now have all the pieces verified from primary sources. Let me confirm the issue #2658 detail (which FA4's `dump_kernel_attributes` credits) and the B200 sm_100 smem figure, then write the cheatsheet.
+
+The key facts are all confirmed from primary sources (cutlass `cutlass/testing.py` exact signature, `jit_executor.py:1055` `dump_to_object`, `hardware_info.py` HardwareInfo methods, FA4 files, and the NVIDIA debugging docs for env vars). I have enough to write a dense, accurate cheatsheet. Let me note: B200 = sm_100, 228 KB/SM smem opt-in is the documented figure but I'll mark per-SM smem query approach. Let me write the markdown.
+
+### 11.3 Measurement: in-DSL benchmark, SASS/res-usage dump, HardwareInfo
+
+> Why this section matters: on Modal's gVisor sandbox **ncu/nsys are dead** (no `/dev/nvidia-caps`, perfmon `LibraryNotLoaded`). The only working profiling on the eval-replica image is (a) **timing ablation** via the in-DSL CUDA-event benchmark, and (b) **static SASS / register+spill dump** via `dump_to_object` + `cuobjdump`/`nvdisasm`. Everything below runs on the plain CUDA-devel image — no host profiler privileges needed.
+
+---
+
+#### A) In-DSL timing harness — `cutlass.testing.benchmark` + `JitArguments`
+
+Source (canonical): `python/CuTeDSL/cutlass/testing.py` — `benchmark` def @ L286, `JitArguments` @ L191. Re-exported (deprecated alias) as `cute.testing.benchmark` / `cute.testing.JitArguments` via `python/CuTeDSL/cutlass/cute/testing.py` L823–L872 — **on 4.5.2 prefer `from cutlass.testing import benchmark, JitArguments`** (the `cute.testing.*` form now emits a `DeprecationWarning`).
+
+**Exact signature** (`cutlass/testing.py:286`):
+```python
+def benchmark(
+    callable,                         # a COMPILED @cute.jit fn (output of cute.compile), not the python fn
+    *,
+    warmup_iterations: int = 10,
+    iterations: int = 100,
+    stream: Optional[cuda_driver.CUstream] = None,   # None -> CU_STREAM_DEFAULT
+    kernel_arguments: Optional[JitArguments] = None,
+    workspace_generator: Optional[Callable[[], JitArguments]] = None,
+    workspace_count: int = 1,
+    use_cuda_graphs: bool = False,
+    use_cupti: bool = False,
+) -> float:                           # RETURNS: average time PER ITERATION, in MICROSECONDS (float)
+```
+Return unit is **µs** — directly comparable to the qr_v2 official µs board, no /1000 needed (docstring L361 "The benchmark time in microseconds"; default path uses `cuEventCreate`/`cuEventElapsedTime` → ms, divided internally).
+
+`JitArguments` (`cutlass/testing.py:191`) is just an args/kwargs holder:
+```python
+class JitArguments:
+    def __init__(self, *args, **kwargs): self.args, self.kwargs = args, kwargs; self.references = []
+    def add_to_scope(self, references): self.references.extend(references)  # keep torch tensors alive across the bench loop (e.g. when passing .view()s)
+```
+The bench loop literally does `callable(*ws.args, **ws.kwargs)` (`testing.py:412-417`). So **arg order in `JitArguments` must match the compiled fn's positional params** (cute `Tensor`s from `from_dlpack`, the `stream`, etc.).
+
+**Minimal pattern** (compile once, time the compiled object):
+```python
+import cutlass.cute as cute
+from cutlass.testing import benchmark, JitArguments
+
+compiled = cute.compile(qr_kernel, mA, mTau, ...)        # JIT compile first
+t_us = benchmark(compiled, kernel_arguments=JitArguments(mA, mTau, ...),
+                 warmup_iterations=10, iterations=100)
+```
+
+**L2-cold rotation (USE THIS for the qr trailing-GEMM ablation — small matrices fit in L2 and give optimistic numbers):** pass a `workspace_generator` returning a *fresh* `JitArguments` each call and `workspace_count>1`; the harness cycles workspaces and, when `workspace_count>1`, allocates `2 × L2_size` and `cuMemsetD32Async`-flushes L2 before timing (`testing.py:395-410`, uses `HardwareInfo().get_l2_cache_size_in_bytes()`):
+```python
+def gen(): return JitArguments(make_A(), make_tau(), ...)   # new device buffers each call
+t_us = benchmark(compiled, workspace_generator=gen, workspace_count=10,
+                 warmup_iterations=10000, iterations=1000)
+```
+Notes / gotchas:
+- **`callable` MUST be the compiled fn** (docstring L344 "for jit function, it must be compiled functions"), otherwise you re-trace every iter and time the compiler.
+- **Non-default stream**: if the kernel launches on a non-default stream you must pass that same `stream=` to `benchmark` (it validates via stream-capture, `_does_kernel_use_stream` L232). For qr_v2 keep the default stream → omit `stream` (also avoids the banned `stream` substring concerns — this is host-side bench code, not the submission file; **never let any of this leak into `submission.py`**).
+- `use_cupti=True` swaps CUDA-events for the CUPTI profiler (`CuptiProfiler`, `testing.py:28`); needs the `cupti-python` pkg and **may be gVisor-blocked like ncu — assume unavailable on Modal, use the default CUDA-event path** (verify on B200). `use_cuda_graphs=True` requires a non-default stream and a compiled fn (graph words also illegal in a submission; bench-only).
+- FA4 cross-check: FA4 does NOT use `cute.testing.benchmark`; it times via `torch.utils.benchmark.Timer` (`flash_attn/cute/benchmark.py:19`) and a 30-iter-warmup `torch.profiler` (`benchmark.py:202-256`). Either is fine; `torch.profiler`'s CUDA table is the gVisor-safe op-breakdown substitute for nsys.
+
+---
+
+#### B) SASS / resource dump — regs & spills (the `setmaxregister` gate: need `n_spills == 0`)
+
+Two routes; route 1 is the pure-DSL one.
+
+**Route 1 — env-var dump of PTX/cubin, then disassemble.** (NVIDIA "Debugging" doc.) Set *before* importing cutlass / before `cute.compile`:
+```bash
+export CUTE_DSL_KEEP_PTX=1      # writes *<function_name>*.ptx
+export CUTE_DSL_KEEP_CUBIN=1    # writes *.cubin
+export CUTE_DSL_DUMP_DIR=/tmp   # where the .ptx/.cubin land (default = cwd)
+# optional: export CUTE_DSL_ARCH=sm_100a   # force B200 arch if autodetect is off (verify on B200)
+```
+Programmatic equivalent: the compiled kernel exposes `__ptx__` and `__cubin__` attributes (NVIDIA debugging doc). Then read regs/spills/SASS from the cubin:
+```bash
+cuobjdump -res-usage  kernel.cubin    # per-kernel: REG count, "Used N registers", spill stores/loads (STACK), smem/cmem
+nvdisasm  kernel.cubin                 # full SASS for occupancy/latency-chain inspection
+cuobjdump -sass       kernel.cubin     # SASS alt
+```
+**Spill check for the `setmaxregister` workflow:** in `cuobjdump -res-usage` the line you gate on is the **stack frame / spill stores+loads** — must be `0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads`. Any non-zero spill means the per-warp `setmaxregister` (the lever that defeated the Gluon ib=16 wall in M2a) over-squeezed; back the cap up. `cuobjdump` ships with the CUDA toolkit; `nvdisasm` too. (Refs: NVIDIA/cutlass issues #2658 "how to dump ptxas info", #2981.)
+
+**Route 2 — `dump_to_object()` → ELF `.o` (embeds cubin), then objdump.** Source: `python/CuTeDSL/cutlass/base_dsl/jit_executor.py:1055`.
+```python
+compiled = cute.compile(qr_kernel, *args)
+obj_bytes = compiled.dump_to_object("qr_v2")     # -> bytes: host launch shim + embedded cubin, ELF
+open("/tmp/qr_v2.o","wb").write(obj_bytes)
+# or one-shot to .h + .o:
+compiled.export_to_c("/tmp", "qr_v2")            # jit_executor.py:1134 -> /tmp/qr_v2.{h,o}
+```
+Then `cuobjdump -res-usage /tmp/qr_v2.o` / `nvdisasm`. `dump_to_object(function_prefix)` arg is just a symbol-prefix string to avoid symbol clashes (L1062); it returns ELF bytes with the cubin spliced in as an `llvm.GlobalOp` named `<prefix>_cubin` (L1090-1112). Requires the export provider (present on a normal `cute.compile`).
+
+**Route 3 — query regs/local-bytes via the driver (no disasm needed), FA4's recipe.** `flash_attn/cute/cute_dsl_utils.py:127` `dump_kernel_attributes(compiled_kernel)`:
+```python
+cubin = compiled_kernel.artifacts.CUBIN   # asserts not None -> compile with --keep-cubin
+# cuLibraryLoadData -> cuLibraryEnumerateKernels -> cuKernelGetFunction, then:
+#   cuFuncGetAttribute(CU_FUNC_ATTRIBUTE_NUM_REGS)         -> num_regs
+#   cuFuncGetAttribute(CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES) -> local_size_bytes (>0 == spills)
+```
+`local_size_bytes > 0` is the spill signal here. Note `artifacts.CUBIN` is `None` unless compiled with the keep-cubin option (assert at `cute_dsl_utils.py:135`; FA4 also reads PTX via `triton.tools.disasm.extract`, `cute_dsl_utils.py:9`). For SASS-from-cubin without nvdisasm, `triton.tools.disasm.extract` works too.
+
+---
+
+#### C) `HardwareInfo` — query SM/L2/occupancy instead of hardcoding "228 KB/SM"
+
+Source: `python/CuTeDSL/cutlass/utils/hardware_info.py` (`class HardwareInfo`). Import: `from cutlass.utils import HardwareInfo` (FA4 uses exactly this, `cute_dsl_utils.py:36`, `tile_scheduler.py:344`). **Prereq: a live CUDA context** (it calls `cuCtxGetCurrent` in `__init__`; just touch torch CUDA first, e.g. `torch.cuda.init()` / any `.cuda()` tensor).
+
+```python
+from cutlass.utils import HardwareInfo
+hw = HardwareInfo(device_id=0)
+n_sm   = hw.get_device_multiprocessor_count()       # B200 -> 148 (matches the CLAUDE.md "148 SMs")  (hardware_info.py:121)
+l2     = hw.get_l2_cache_size_in_bytes()             # for your own L2-cold sizing (hardware_info.py:113)
+n_clu  = hw.get_max_active_clusters(cluster_size=2)  # max co-resident clusters for a given cluster size (L44)
+```
+- `get_max_active_clusters(cluster_size)` is the **real occupancy oracle** for the persistent / 2-SM-tile engine: it compiles a probe kernel, sets `CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES` to the device max, then runs `cuOccupancyAvailableDynamicSMemPerBlock` → `cuOccupancyMaxActiveBlocksPerMultiprocessor` → `cuOccupancyMaxActiveClusters` (L55-111). `cluster_size` must be 1–32 (L50). FA4 caches it (`@lru_cache get_max_active_clusters`, `cute_dsl_utils.py:34`).
+- **Per-SM smem ("228 KB"): there is NO `get_smem_per_sm()` method on `HardwareInfo`.** Query the driver attribute directly (the same enum HardwareInfo uses internally at L57):
+  ```python
+  from cuda.bindings import driver
+  dev = hw.device
+  _, smem_optin = driver.cuDeviceGetAttribute(
+      driver.CUdevice_attribute.CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN, dev)   # per-BLOCK opt-in max
+  _, smem_per_sm = driver.cuDeviceGetAttribute(
+      driver.CUdevice_attribute.CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_MULTIPROCESSOR, dev) # per-SM total
+  ```
+  On B200/sm_100 expect per-block opt-in ≈ **227 KB (232448 B)** and per-SM ≈ 228 KB (**verify on B200** — read it, don't hardcode; this is exactly the number that bounds "1 CTA/SM vs co-residence"). For the occupancy-vs-smem tradeoff prefer `cuOccupancyMaxActiveBlocksPerMultiprocessor(func, blockSize, dynSmem)` on your *actual* compiled kernel (via the driver, as HardwareInfo does at L73) rather than dividing by a hardcoded per-SM figure — it accounts for regs+smem+barrier limits jointly, which is what the M6 per-matrix engine occupancy actually depends on.
+
+**Sources:**
+- cutlass `python/CuTeDSL/cutlass/testing.py` (benchmark L286 / JitArguments L191 / CuptiProfiler L28) and `cute/testing.py` (deprecation aliases L823-872) — https://github.com/NVIDIA/cutlass (tree `python/CuTeDSL/cutlass/`)
+- cutlass `python/CuTeDSL/cutlass/base_dsl/jit_executor.py` (`dump_to_object` L1055, `export_to_c` L1134)
+- cutlass `python/CuTeDSL/cutlass/utils/hardware_info.py` (`HardwareInfo`)
+- FA4: `flash_attn/cute/cute_dsl_utils.py` (HardwareInfo use L36/L129, `dump_kernel_attributes` L127, triton disasm L9), `flash_attn/cute/cute_dsl_ptxas.py` (CUTE_DSL_KEEP_PTX/CUBIN/DUMP_DIR), `flash_attn/cute/benchmark.py` (torch.utils.benchmark + torch.profiler fallback)
+- NVIDIA CUTLASS Docs — Debugging (CUTE_DSL_KEEP_PTX/KEEP_CUBIN/DUMP_DIR, CUTE_DSL_ARCH, `__ptx__`/`__cubin__`, nvdisasm): https://docs.nvidia.com/cutlass/latest/media/docs/pythonDSL/cute_dsl_general/debugging.html
+- NVIDIA CUTLASS Docs — JIT Compilation Options: https://docs.nvidia.com/cutlass/latest/media/docs/pythonDSL/cute_dsl_general/dsl_jit_compilation_options.html
+- NVIDIA CUTLASS Docs — Auto-Tuning guide (benchmark/JitArguments usage): https://docs.nvidia.com/cutlass/latest/media/docs/pythonDSL/cute_dsl_general/autotuning_gemm.html
+- NVIDIA/cutlass issues #2658 (dump ptxas info), #2981 (ptxas version)
