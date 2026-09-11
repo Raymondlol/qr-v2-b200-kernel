@@ -1,6 +1,6 @@
 # HANDOVER → next session (final state after the 2026-06-26 research-grade session)
 
-> **▶ READ THIS FIRST, then `CLAUDE.md` + `docs/DEAD_ENDS.md`. Memory files `[[qr-v2-gluon-warp-specialize]]` + `[[qr-v2-atomic-grid-barrier]]` mirror this. The autonomous next-session plan is `docs/NEXT_SESSION_PROMPT.md`.**
+> **▶ READ THIS FIRST, then `CLAUDE.md` + `docs/DEAD_ENDS.md`. Memory files `the Gluon warp-specialization autopsy in `docs/DEAD_ENDS.md`` + `the atomic grid-barrier result in `docs/DEAD_ENDS.md`` mirror this. The autonomous next-session plan is `docs/NEXT_SESSION_PROMPT.md`.**
 
 ## STATE
 `submission.py` = **V5 tf32x3 = 5915µs official (best, UNCHANGED, grep-clean)**. Leader **1292µs (4.6×)**. Net session speed gain = **0**; the value is the COMPLETE measured map of what's dead and why (below). Branch this work lives on: `gluon-smem-panel` → merged to `main`.
@@ -9,11 +9,11 @@
 - **Gluon warp-spec OVERLAP (design A = in-CTA panel‖trailing): DEAD.** Mechanism validated (`gl.warp_specialize` EXISTS in stock Gluon; async tcgen05 overlaps eff 0.6–1.0; single-CTA trailing penalty at n=512 only 1.12×; the worker MUST use low-level async `tcgen05_mma(mbarriers=[bar])` NOT `tl_dot` which CTA-barrier-couples → eff 0.06). BUT the panel can't co-reside: the register panel blows the 16-warp/64K budget; the smem-streaming panel (built, bit-faithful) is **2.56–6.74× too slow** (register gate ⟂ speed gate = mutually exclusive). See DEAD_ENDS "Gluon design-A overlap".
 - **Deployable trailing levers: DEAD.** §1a 3-level recursive (K-rich) blocking = **0.976×** (NB-256 widening eats the win); §1b 3×cuBLAS trailing = **0.866×**. The fused tf32x3 Triton kernel is already optimal.
 - **CholeskyQR (incl the conditioning-routing idea): DEAD.** Floor-breaker `_LinAlgError` at n=2048/4096 (cond(G)~6.5e11 — can't even factor); slower than our Householder where valid (n=512 22ms vs 14ms, because the panel is already batch-hidden there); conditioning-routing is the v2-forbidden reward-hack (reseed-DQ).
-- **Multi-CTA cooperative panel: barrier WORKS, panel use DEAD.** Hand-rolled sense-reversing atomic grid barrier (`tl.atomic_add`+spin) is grep-clean / correct / reusable / **~2.6µs** — overturns "grid-sync=banned" (the ban is only `cudaLaunchCooperativeKernel`). BUT the panel's per-column work (~0.66µs) < barrier (~2.6µs) → cooperative panel **7–8× SLOWER**. Granularity-dead. See `[[qr-v2-atomic-grid-barrier]]`.
+- **Multi-CTA cooperative panel: barrier WORKS, panel use DEAD.** Hand-rolled sense-reversing atomic grid barrier (`tl.atomic_add`+spin) is grep-clean / correct / reusable / **~2.6µs** — overturns "grid-sync=banned" (the ban is only `cudaLaunchCooperativeKernel`). BUT the panel's per-column work (~0.66µs) < barrier (~2.6µs) → cooperative panel **7–8× SLOWER**. Granularity-dead. See `the atomic grid-barrier result in `docs/DEAD_ENDS.md``.
 - **TLX (the leaders' filename route): INFEASIBLE for us.** NOT on Modal (Meta triton fork; no pip pkg, only a from-source build); eval has no nvcc for raw PTX. We can't develop/debug it (`modal_tlx_probe.py`).
 
 ## Why the leaders are 4.6× ahead (first-hand, this session)
-SAME algorithm (blocked Householder, flat output). The gap = an integrated **warp-specialized PERSISTENT tcgen05 engine**: a peak-fed trailing GEMM (TMA producer warps + multi-stage pipeline + 2-SM tiles) WITH the latency-bound panel hidden behind it. gau.nernst (1558µs, plain `submission.py`) proves the pure-Gluon route EXISTS — not toolchain-blocked, just multi-week expert engineering depth we haven't built.
+SAME algorithm (blocked Householder, flat output). The gap = an integrated **warp-specialized PERSISTENT tcgen05 engine**: a peak-fed trailing GEMM (TMA producer warps + multi-stage pipeline + 2-SM tiles) WITH the latency-bound panel hidden behind it. the then-leader (1558µs, plain `submission.py`) proves the pure-Gluon route EXISTS — not toolchain-blocked, just multi-week expert engineering depth we haven't built.
 
 ## THE remaining crux (everything else is dead): a panel that is BOTH fast AND co-residable
 design A died on exactly this. Two unexplored cracks:
@@ -74,7 +74,7 @@ The staged TODO below MEASURES this tension before committing to the big build.
 ### Phase 2 — Full fused factorization (multi-day, THE build).
 - Port `submission.py::_panel_kernel` (the reflector reduction loop) into Gluon as the panel warp-group; the trailing via async `tcgen05_mma`; mbarrier coordination; the look-ahead split (do the look-ahead column block [k+nb:k+2nb] of trailing(k) first, then panel(k+1) ‖ trailing-rest(k)).
 - Build incrementally: correct on ONE matrix vs `torch.geqrf` → batched 640 → then 22/22.
-- Keep panel reductions FP32 (low-precision panel corrupts reflectors — proven dead). Keep the T-factor solve fp32-safe (the solve-tf32 artifact — see [[qr-v2-solve-tf32-floor-artifact]]).
+- Keep panel reductions FP32 (low-precision panel corrupts reflectors — proven dead). Keep the T-factor solve fp32-safe (the solve-tf32 artifact — see the tf32-solve artifact finding in `docs/DEAD_ENDS.md`).
 
 ### Phase 3 — Integrate, validate, submit (~1 day).
 - Shape-route: the Gluon overlap kernel for **n≤512** (where panel = 41%); keep the existing path for n≥1024 / large-n.

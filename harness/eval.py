@@ -1,3 +1,7 @@
+# VENDORED — NOT MY CODE.
+# Upstream: the GPU MODE `kernelbot` / `reference-kernels` evaluation harness.
+# Local change: `from __future__ import annotations` prepended for py3.8.
+# Upstream's own license applies, not this repo's MIT. See ../NOTICE.
 from __future__ import annotations
 import dataclasses
 import math

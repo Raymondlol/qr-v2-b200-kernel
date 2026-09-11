@@ -19,7 +19,7 @@ You are continuing the GPU MODE **qr_v2** batched-Householder-QR kernel competit
   recursive-blocking (0.976×); cuBLAS-trailing (0.866×); TLX (infeasible on Modal). Full proof in DEAD_ENDS.
 - **The leaders' edge is engineering, not algorithm**: an integrated warp-specialized PERSISTENT tcgen05
   engine (TMA producer warps + multi-stage pipeline + 2-SM tiles) with the latency-bound panel hidden
-  behind the trailing. gau.nernst (1558µs, plain submission.py) proves the pure-Gluon route exists.
+  behind the trailing. the then-leader (1558µs, plain submission.py) proves the pure-Gluon route exists.
 
 ## Reusable BUILT + verified assets (do NOT rebuild — read them)
 `experiments/gluon_panel.py` (bit-faithful Gluon Householder panel = correctness ref),

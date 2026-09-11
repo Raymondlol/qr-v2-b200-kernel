@@ -11,6 +11,13 @@ first place. The parts I'd actually point at are [`docs/DEAD_ENDS.md`](docs/DEAD
 didn't work, and why — **start at §0**, the most expensive mistake here is one I invented myself) and
 [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) (how I stopped fooling myself with benchmarks).
 
+*On the numbers:* **1,292 µs** is the final first-place geomean and the only figure to compare
+against; `4,247 / 1,292 = 3.3×` is the final gap. Older documents here quote **1,558 µs** (a
+mid-competition snapshot of the leading score, from 2026-06-26) and gaps of **4.5×** or **4.6×**
+(the same 1,292 measured against my V9 5,791 and V5 5,915 respectively). Those are snapshots, not
+disagreements — the board moved and so did I. `docs/HOW_LEADERS_ARE_FAST.md` also quotes ~1.32 ms,
+which is what the first-place submission reports in its own source, not the board's figure for it.
+
 *Two caveats on "the record", so you don't have to find them yourself:* the first four rungs
 (123,203 → 8,580 µs — the first 14× of the 29×) were built before I put this under version control
 and land fully-formed in a single early commit, so the git history covers the second half of the
@@ -24,7 +31,7 @@ do not. See [`milestones/README.md`](milestones/README.md).
 | **Starting point** | 123,203 µs (correct, all-eager PyTorch) |
 | **Speedup** | **29×** |
 | **Correctness** | 22/22 official test cases, every submission |
-| **Leader** | 1,292 µs — I finished ~3.3× behind, and [I know exactly why](#the-gap-i-didnt-close) |
+| **Leader** | 1,292 µs — I finished 3.3× behind, and [I know exactly why](#the-gap-i-didnt-close) |
 | **Hardware** | NVIDIA B200, no local GPU (developed from a Mac against rented B200s) |
 | **Elapsed** | 6 days (2026-06-25 → 06-30); 70 commits |
 | **Stack** | PyTorch + Triton, plus dead-end excursions into Gluon, raw PTX/CUDA, and CUTLASS cute-DSL |
@@ -204,7 +211,7 @@ missed the algorithm.
 ```
 submission.py            the 4,247 µs entry (byte-identical to milestones/11_*_BEST.py)
 milestones/              every scored version + README.md provenance table; filename = official score
-experiments/             146 single-variable candidates; INDEX.md covers all of them
+experiments/             151 single-variable candidates; INDEX.md covers all of them
 tools/                   gen_experiments_index.py (regenerates + coverage-checks that index),
                          prune_branches.sh (branch cleanup; every tip preserved as archive/<name>)
 requirements.txt         CPU gate deps.  requirements-modal.txt documents the B200 image

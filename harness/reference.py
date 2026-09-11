@@ -1,3 +1,9 @@
+# VENDORED — NOT MY CODE.
+# Upstream: the GPU MODE `qr_v2` task definition (reference implementation +
+# correctness gates). This file is the competition's own spec — the tolerances
+# here are what "correct" means.
+# Local change: `from __future__ import annotations` prepended for py3.8.
+# Upstream's own license applies, not this repo's MIT. See ../NOTICE.
 from __future__ import annotations
 import torch
 from task import input_t, output_t

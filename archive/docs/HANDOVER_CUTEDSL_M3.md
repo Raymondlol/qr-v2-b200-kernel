@@ -1,7 +1,7 @@
 # HANDOVER → CuTe-DSL engine build (archive of the 2026-06-27 build session)
 
 > Read this, then `docs/M3C_BUILD_GUIDE.md` + `docs/FA4_BLUEPRINT_FOR_QR.md` + auto-memory
-> ([[cutedsl-modal-loop]]). Branch `claude/naughty-sammet-cbcc8d`. Comp ends **2026-06-30**.
+> (the cute-DSL handover in `docs/HANDOVER_CUTEDSL_M6.md`). Branch `claude/naughty-sammet-cbcc8d`. Comp ends **2026-06-30**.
 
 ## §0 — STATE (one line)
 Built the cute-DSL warp-spec QR engine bottom-up; **EVERY building block is validated on B200**

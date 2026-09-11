@@ -179,7 +179,7 @@ The binding numerical gate. Every engine Mi must clear worst-of-640 margin ≥ 1
 - **Isolation false-NO-GO:** the 4 prior "walls" (design-A ib=16, design-B contention, single-CTA-trailing, smem-panel) were all isolated artifacts; the fused/persistent design evades them. Conversely, cute-dsl piece wins will EVAPORATE whole. → whole-kernel gate only.
 - **grid=640 harness artifacts:** gfused/m3/m4/m5 showed herr=8e-1 from buffer-reuse/OOM ordering, not real bugs. → fresh A+Hg per config, one config per run, always test grid=640 in isolation.
 - **`warp_specialize` may not exist in cute-dsl 4.5.2** (it's a Gluon feature; not found in 4.5.2 docs). If absent, M4 overlap is hand-rolled `mbarrier_init/arrive/wait` + phase toggle + `NamedBarrier`. Confirm in M0.
-- **cute-dsl CANNOT emit raw PTX/SASS** — it's sufficient (Gluon's 1558µs proves the expressive range) but cannot exceed it. No custom register allocation beyond `warpgroup_reg_alloc`.
+- **cute-dsl CANNOT emit raw PTX/SASS** — it's sufficient (Gluon's 1558µs — the leading score at the time this was written; final #1 was 1292µs — proves the expressive range) but cannot exceed it. No custom register allocation beyond `warpgroup_reg_alloc`.
 - **Modal ≠ eval image** — Modal (torch+triton) compiles cute-dsl but is NOT the eval; every milestone confirmed on a real gpumode submission, with the probe (M0) FIRST.
 
 ---

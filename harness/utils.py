@@ -1,3 +1,7 @@
+# VENDORED — NOT MY CODE.
+# Upstream: the GPU MODE harness, itself adapted from LinkedIn Liger-Kernel
+# (see the attribution comment further down this file). Unmodified.
+# Upstream's own license applies, not this repo's MIT. See ../NOTICE.
 import os
 import random
 import numpy as np

@@ -98,7 +98,7 @@ The register/occupancy numbers are the concrete baseline for the `gluon-regfile-
 overlap effort: they show *why* the production panel can't co-reside (255 regs, spills) and
 confirm the regfile panel (108 regs / 0 spills) is the right lever. The SASS confirms the
 panel is latency-bound, so hiding it behind the trailing (not speeding up its FMAs) is the
-correct strategy. See `[[qr-v2-gluon-warp-specialize]]` / the `gluon-regfile-panel` branch.
+correct strategy. See `the Gluon warp-specialization autopsy in `docs/DEAD_ENDS.md`` / the `gluon-regfile-panel` branch.
 
 ## If real NCU is needed (recommendation)
 Use a **non-gVisor GPU host** where the perfmon device interface and clock sync are intact:

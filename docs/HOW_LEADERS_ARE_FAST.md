@@ -39,7 +39,9 @@ And: **first place is pure Triton. The hand-written tcgen05 engine finished thir
 | **B** (2nd) | CUDA + cublasLt | **exact Householder, but the panel made physically fast**: register-file warp-per-column + **2-SM cluster TMA** | cublasLt per-member compute type: tf32 / **bf16x9** / fp16 + custom `build_t128_diag` T kernel | thin Python dispatch + in-C++ sweep | `register_2sm_panel_kernel` (`__cluster_dims__(2,1,1)`), `gmem_panel_kernel` (atomic multi-CTA cooperative panel) |
 | **C** (3rd) | raw CUDA + **inlined CUTLASS/CuTe PTX headers** | CQR-BDGHK (same as A) + **hand-written warp-specialized tcgen05** GEMMs | per-member (`eh_set_trail_mode` / `ksafe` / `dual_mode`) + fp16 Schur | **PDL** + **explicit-node CUDA graph** + **in-grid co-dispatch** | `gramdc_kernel` (dual-consumer SYRK), `k_fused_diag_codisp` (chol ∥ lu ∥ Schur-tail in one grid), block pipeline |
 
-A reports a geomean around 1.32 ms; all three land in the ~1.1–1.3 ms band. I was at ~4.25 ms — about 3.3× behind.
+A reports a geomean around 1.32 ms **in its own source comments**; all three land in the ~1.1–1.3 ms
+band. The board's final figure for first place is **1,292 µs**, which is the number used everywhere
+else in this repo and the one the 3.3× gap is computed from (4,247 / 1,292). I was at 4,247 µs.
 
 ---
 

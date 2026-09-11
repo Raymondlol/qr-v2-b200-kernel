@@ -15,7 +15,7 @@
 > _(Original plan below — Stages B–D are now moot for design A; kept for the design-B fallback reasoning.)_
 
 > **Branch `gluon-smem-panel`** (from the de-risk session commit). Read `CLAUDE.md` + the
-> `docs/HANDOVER_NEXT_SESSION.md` banner + `[[qr-v2-gluon-warp-specialize]]` memory FIRST —
+> `docs/HANDOVER_NEXT_SESSION.md` banner + `the Gluon warp-specialization autopsy in `docs/DEAD_ENDS.md`` memory FIRST —
 > this plan assumes the full Phase 0/1/1.5 diagnosis below.
 
 ## The single remaining unknown (everything else is de-risked)

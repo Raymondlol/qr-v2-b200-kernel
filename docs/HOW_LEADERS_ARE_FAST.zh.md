@@ -28,7 +28,7 @@
 | **B**(第2) | CUDA + cublasLt | **精确 Householder,但把 panel 做到极致**:寄存器 warp-per-column + **2-SM cluster TMA** | cublasLt 逐 member compute-type:tf32 / **bf16x9** / fp16 + 自定义 `build_t128_diag` T-kernel | Python 少调度 + C++ sweep | `register_2sm_panel_kernel`(`__cluster_dims__(2,1,1)`)、`gmem_panel_kernel`(atomic 多-CTA 协作 panel) |
 | **C**(第3) | 原始 CUDA + **内联 CUTLASS/CuTe PTX 头** | CQR-BDGHK(同 A)+ **手写 warp-spec tcgen05** GEMM | 逐 member(`eh_set_trail_mode`/`ksafe`/`dual_mode`)+ fp16-Schur | **PDL** + **explicit-node CUDA graph** + **in-grid co-dispatch** | `gramdc_kernel`(dual-consumer SYRK)、`k_fused_diag_codisp`(chol∥lu∥Schur-tail 一个 grid)、block-pipeline |
 
-A 报告的 geomean ~1.32ms;三份都在 ~1.1–1.3ms 档,我们当时 ~4.2ms(~3.3×)。
+A 在**自己的源码注释里**报的 geomean ~1.32ms;三份都在 ~1.1–1.3ms 档。榜单给第一名的最终数字是 **1292µs** —— 本仓库其他地方统一用这个数,3.3× 的差距也是按它算的(4247 / 1292)。我们 4247µs。
 
 ---
 
