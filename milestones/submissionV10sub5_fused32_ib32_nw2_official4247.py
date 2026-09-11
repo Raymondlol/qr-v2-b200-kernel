@@ -1,4 +1,4 @@
-# === SubmissionV9 = V5 + glue fusion (M-builder + V-builder + M^T-no-transpose) — OFFICIAL 5791us CONFIRMED (V5 5915, -2.1%, best) ===
+# === SubmissionV10-sub5 (fused32/ib32/nw2) = OFFICIAL ~4247us (id 840028) = BEST. V10 + route n<=64/B>16 to the fused Triton QR kernel (IB=32, nw=2) instead of geqrf (b20-n32 dense 318->30us). Built on V9 (V5 + glue fusion). ===
 # Phase 1a proxy: ib=64 for n=512 (fused-panel route, fewer narrow updates).
 # qr_v2 submission: batched compact-Householder QR for B200. (n=2048 routed to
 # custom one-CTA panel + warps; n=4096 to cuSOLVER.) Validated 22/22.

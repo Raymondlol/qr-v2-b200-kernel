@@ -41,7 +41,7 @@ row-blocks** (only one block in registers at a time). Then panel(8w, ~20–32 re
   partitions must NOT return tensors (write outputs directly); `tcgen05_mma(..., mbarriers=[bar])`
   (must pass mbarriers or it's synchronous); init bar count=NPASS.
 - Test harness: `modal_microbench.py --script <x>` (single B200 script); `modal_lab.py` (correctness/
-  compare). Modal path `/Users/raymond/Downloads/SubPY/.modalenv/bin/modal`.
+  compare). Modal path `modal`.
 
 ## The smem-streaming panel design (the build)
 Current per-j-iteration (register version) holds the whole `[BN, BCOLS]` tile in regs across all

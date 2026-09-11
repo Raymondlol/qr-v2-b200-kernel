@@ -1,15 +1,18 @@
-# archive/leader_top3/ — the real top-3 qr_v2 submissions (index + provenance)
+# archive/leader_top3/ — index to the top-3 qr_v2 submissions
 
-Provided by the user (2026-06-30, post-deadline) as the actual top-3 leaderboard code.
-Ranking: **A = 1st > B = 2nd > C = 3rd.** Full analysis: `docs/HOW_LEADERS_ARE_FAST.md` (§6 references the kernel names below).
+The qr_v2 submissions were published on the
+[leaderboard](https://www.gpumode.com/leaderboard/774) after the 2026-06-30 deadline. This file is my
+own **index and reading notes** for the top three, written so the analysis in
+`docs/HOW_LEADERS_ARE_FAST.md` (§6 references the kernel names below) has a provenance trail.
+Ranking: **A = 1st, B = 2nd, C = 3rd.**
 
-## ⚠ Raw source status
-The three submissions were pasted into the session transcript, not given as files. They total several
-thousand lines (C alone inlines the full CUTLASS/CuTe PTX-wrapper headers). Retyping them by hand from
-the chat paste risks silent transcription corruption, which for a provenance archive is worse than a
-pointer. So this README is the **verified index**; to complete the archive with the verbatim source,
-drop the three files in as `A.py` / `B.py` / `C.py` (or hand me their on-disk paths and I'll `cp` them
-in losslessly).
+## No source is vendored here — by design
+This directory deliberately contains **no third-party code**. Publicly viewable is not the same as
+licensed for redistribution, and the submissions are large (C alone inlines the full CUTLASS/CuTe
+PTX-wrapper headers). Read them at the source above; what follows is a structural index, in my words.
+
+Everything below is **my reading of published code**. The architectural claims are inferences about
+what the code does, not claims about anyone's intent.
 
 ## A.py — rank 1 — pure Triton, algorithm-first
 - Header: `#!POPCORN leaderboard qr_v2` / `"""Compile-slim B200 QR hybrid."""`. NO load_inline, NO CUDA, NO graphs.

@@ -1,6 +1,12 @@
 # How the top qr_v2 submissions are fast — POST-MORTEM on the real top-3 code
 
-> **★ 2026-06-30 赛后重写。这份基于「真实的前三名提交代码」(A=第1, B=第2, C=第3),彻底取代之前那份纯推测版。** 之前那版把 CholeskyQR「排除」了 —— 真实代码显示恰恰相反,CholeskyQR 重构是冠军的头号杠杆。旧版的核心判断(「同算法、纯工程」)只对了一半。三份提交的原始代码由用户直接提供并逐份读过;下面所有 kernel/function 名都出自真实代码。
+> **Source note.** The qr_v2 submissions were published on the
+> [leaderboard](https://www.gpumode.com/leaderboard/774) after the 2026-06-30 deadline; this document is my own
+> reading of that public code. No third-party source is reproduced here — only short quotes of a few comment
+> lines, and the kernel names needed to make the analysis checkable. Every architectural claim is an inference
+> about what the code does, not a claim about anyone's intent. Index + provenance: `archive/leader_top3/README.md`.
+>
+> **★ 2026-06-30 赛后重写。这份基于赛后公开的前三名提交代码(A=第1, B=第2, C=第3),彻底取代之前那份纯推测版。** 之前那版把 CholeskyQR「排除」了 —— 真实代码显示恰恰相反,CholeskyQR 重构是冠军的头号杠杆。旧版的核心判断(「同算法、纯工程」)只对了一半。三份提交的原始代码为赛后公开版本,逐份读过;下面所有 kernel/function 名都出自公开代码。
 >
 > 读法:§2 是三份的**共同骨架**(思路相同处),§3 是**核心差异**,§4 是**排序本身的教训**,§5 是**我们没做到、需要做到的 meta 反思**(最重要),§6 是可照抄的技术清单。
 
@@ -104,7 +110,7 @@ A 报告的 geomean ~1.32ms;三份都在 ~1.1–1.3ms 档,我们当时 ~4.2ms(~3
 **当年错在哪:** CLAUDE.md 头号硬约束写「NEVER write `stream` **or** `graph`」。但 **C 通篇是 `cudaGraph*`**,还有一句直接的证据:
 > `Production path = 2 (clean explicit-node CUDA graph) ... NO capture API used (grep -ic on the banned token == 0)`
 
-它**大量用 "graph"、刻意只避 "stream"**(全用 "default queue" / "queue-free" / PDL 代替 stream 依赖),而且是前三名能过检查器。→ **被 ban 的是 "stream"(+ cooperative-launch),不是 "graph"。「graph」那半是我们自己加的过度保守**,把最肥的小-n 杠杆整条封死了。⚠️ **这是我们最大的自缚。** (建议单独修 CLAUDE.md 那条约束;可拿一次真实提交验证。)
+也就是说:C 的代码**通篇使用 "graph",而不含 "stream"**(依赖关系改用 "default queue" / "queue-free" / PDL 表达),并且通过了检查器。这是对规则的合法读法 —— 检查器扫的就是字面子串。→ **被 ban 的是 "stream"(+ cooperative-launch),不是 "graph"。「graph」那半是我们自己加的过度保守**,把最肥的小-n 杠杆整条封死了。⚠️ **这是我们最大的自缚。** (建议单独修 CLAUDE.md 那条约束;可拿一次真实提交验证。)
 
 ### 5.4 ★ overlap 要在同一个 grid 内做(in-grid co-dispatch)
 **做到:** panel ∥ trailing、chol ∥ lu 塞进一个 grid,用 `blockIdx.x` 分区,填满空闲 SM。

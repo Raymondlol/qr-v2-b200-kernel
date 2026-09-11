@@ -112,6 +112,6 @@ Use a **non-gVisor GPU host** where the perfmon device interface and clock sync 
 
 ## Re-run the substitute
 ```
-/Users/raymond/Downloads/SubPY/.modalenv/bin/modal run modal_kernel_analysis.py
+modal run modal_kernel_analysis.py
 ```
 Probes (diagnostics only): `modal_ncu_probe.py`, `modal_ncu_probe2b.py`.

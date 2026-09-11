@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Parallel sweep driver for fp8_ozaki_sim.py on batch=640 (worst-of-640 gate).
 # Each job thread-limited; bounded parallelism to avoid thrash on 12c/18GB.
-PY=/Users/raymond/opt/anaconda3/bin/python
+PY=python
 SIM="$(dirname $0)/fp8_ozaki_sim.py"
 OUT="$(dirname $0)/sweep_out.txt"
 : > "$OUT"

@@ -1,6 +1,6 @@
 """Dump FULL PTX + SASS hot-loop of the SOTA fused kernel (_fused_qr_k) for line-by-line reading.
 Orthogonal to the moonshot (this is the plain-Triton V10). Run:
-  /Users/raymond/Downloads/SubPY/.modalenv/bin/modal run modal_dump_asm.py > /tmp/asm.log 2>&1
+  modal run modal_dump_asm.py > /tmp/asm.log 2>&1
 """
 import pathlib, modal
 HERE = pathlib.Path(__file__).parent

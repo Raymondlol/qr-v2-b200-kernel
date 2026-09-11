@@ -17,7 +17,7 @@ signal we actually wanted via mechanisms that survive gVisor:
 
 Targets submission.py's QR at the dominant n=512 b=640 case (4 of 12 benchmarks).
 
-Run: /Users/raymond/Downloads/SubPY/.modalenv/bin/modal run modal_kernel_analysis.py
+Run: modal run modal_kernel_analysis.py
 """
 import pathlib, modal
 

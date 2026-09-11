@@ -93,7 +93,7 @@ The staged TODO below MEASURES this tension before committing to the big build.
 - Capability (captured this session, `recon_tlx_gluon.py` on B200 triton 3.6.0): Gluon `nvidia.blackwell` exposes `tcgen05_mma`, `tcgen05_mma_scaled`, `tcgen05_commit`, `tcgen05_copy`, `allocate_tensor_memory`, `tensor_memory_descriptor`, `mbarrier`, `async_copy`, `tma`, `fence_async_shared`. NO high-level `warp_specialize`/`async_task`.
 - Panel to port: `submission.py` `_panel_kernel` (lines ~215-260) + `_apply_block` (compact-WY trailing).
 - Profile anchors: `experiments/profile_phases.py` (panel 41 / gram 15 / trailing 26 / solve 18 at n=512 b=640).
-- Test harness: `modal_lab.py` (correctness/compare/profile) + `modal_microbench.py --script <x>` (single B200 script). Modal path: `/Users/raymond/Downloads/SubPY/.modalenv/bin/modal`.
+- Test harness: `modal_lab.py` (correctness/compare/profile) + `modal_microbench.py --script <x>` (single B200 script). Modal path: `modal`.
 
 ## Honest risk register
 - No high-level `warp_specialize` → hand-rolled mbarrier warp-spec is the core difficulty and the Phase-0 risk.

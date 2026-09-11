@@ -1400,7 +1400,7 @@ The MMA smem descriptor only encodes the layout (LBO/SBO/swizzle) — it does **
 
 ---
 
-Files backing the validated claims (all absolute): `/Users/raymond/Downloads/SubPY/.claude/worktrees/vibrant-proskuriakova-9a15c8/experiments/cute_gemm_tf32x3.py` (8.2), `.../experiments/cute_ring_g1.py` (8.4/8.5), `.../experiments/cute_qr_m6.py` (8.5 heisenbug), `.../experiments/cute_pipesrc.py` (8.3 diagnosis), `.../experiments/cute_qr_m3c_tc.py` (8.7); FA4 `/Users/raymond/Downloads/flash-attention-main 2/flash_attn/cute/pipeline.py:330,380,391,402` (8.3 `_override_create` re-class confirmed present).
+Files backing the validated claims (all absolute): `experiments/cute_gemm_tf32x3.py` (8.2), `.../experiments/cute_ring_g1.py` (8.4/8.5), `.../experiments/cute_qr_m6.py` (8.5 heisenbug), `.../experiments/cute_pipesrc.py` (8.3 diagnosis), `.../experiments/cute_qr_m3c_tc.py` (8.7); FA4 `<flash-attention>/flash_attn/cute/pipeline.py:330,380,391,402` (8.3 `_override_create` re-class confirmed present).
 
 ---
 
@@ -1654,7 +1654,7 @@ The tf32x3 bit-AND split + 3 dead alternatives (§5.6/§8.2/§9.5), the `Pipelin
 
 ### 11.1 cp.async producer ring + launch-flag caution
 
-cute-DSL 4.5.2 / Blackwell sm100. cp.async (non-bulk) is the **sm80/sm90-era** g2s fill path; on sm100 it's the documented fallback when you can't/don't want TMA (e.g. gather loads, irregular tiles, no descriptor). All FA4 file:line refs below use the SPACE-containing path `/Users/raymond/Downloads/flash-attention-main 2/`.
+cute-DSL 4.5.2 / Blackwell sm100. cp.async (non-bulk) is the **sm80/sm90-era** g2s fill path; on sm100 it's the documented fallback when you can't/don't want TMA (e.g. gather loads, irregular tiles, no descriptor). All FA4 file:line refs below use the SPACE-containing path `<flash-attention>/`.
 
 #### A) cp.async producer ring
 
@@ -1792,7 +1792,7 @@ Sources: [tcgen05 MMA Python (MmaTF32Op/MmaF16BF16Op/OperandSource/CtaGroup)](ht
 
 **FA4 idiom — the canonical "rebuild a tensor with aligned-stride assumptions"** (note the literal SPACE in the path):
 
-`"/Users/raymond/Downloads/flash-attention-main 2/flash_attn/cute/cute_dsl_utils.py"`:
+`"<flash-attention>/flash_attn/cute/cute_dsl_utils.py"`:
 ```python
 # cute_dsl_utils.py:44
 def assume_strides_aligned(t):
@@ -1826,7 +1826,7 @@ Two different reinterpret tools — pick by *what* you're reinterpreting:
 
 `cute.recast_tensor(src, dtype)` is the DSL analog of C++ `cute::recast<NewT>(tensor)`. When `sizeof(NewT) != sizeof(OldT)` the **innermost layout extent scales** by the size ratio (e.g. 2×fp32 → 1×Int32 halves that mode), so the new size must divide evenly. FA4 mined examples:
 
-`"/Users/raymond/Downloads/flash-attention-main 2/flash_attn/cute/utils.py"`:
+`"<flash-attention>/flash_attn/cute/utils.py"`:
 - `:540–542` (`shuffle_sync`): pack a value into a 1-elem rmem tensor, then `val_i32 = cute.recast_tensor(val, cutlass.Int32)` to shuffle it as 32-bit words. **Gotcha (commented at :539): "need stride 1 and not 0 for recast_tensor to work"** — a stride-0 (broadcast) layout can't be recast; the contiguous mode must have unit stride.
 - `:673` (fp32→fp16x2 convert): `dst_i32 = cute.recast_tensor(dst, cutlass.Int32)` then write 2 packed fp16 per Int32 via `cvt_f16x2_f32` — i.e. recast the fp16 dst as Int32 so each store lands a packed `.b32`.
 
@@ -1846,8 +1846,8 @@ Sources: [cute.recast_tensor signature & semantics](https://docs.nvidia.com/cutl
 ```
 
 Key reference files (all absolute paths):
-- FA4 mined: `/Users/raymond/Downloads/flash-attention-main 2/flash_attn/cute/cute_dsl_utils.py` (lines 44-59 assume idiom, 62-84 fp8 DLPack workaround), `.../utils.py` (lines 539-545, 660-677 recast_tensor), `.../copy_utils.py` (line 324/342 TMA partition).
-- The cheatsheet this slots into: `/Users/raymond/Downloads/SubPY/.claude/worktrees/vibrant-proskuriakova-9a15c8/docs/CUTEDSL_CHEATSHEET.md` (this closes the G9 gap flagged at line 1634; existing C++ atom cross-refs at line 713).
+- FA4 mined: `<flash-attention>/flash_attn/cute/cute_dsl_utils.py` (lines 44-59 assume idiom, 62-84 fp8 DLPack workaround), `.../utils.py` (lines 539-545, 660-677 recast_tensor), `.../copy_utils.py` (line 324/342 TMA partition).
+- The cheatsheet this slots into: `docs/CUTEDSL_CHEATSHEET.md` (this closes the G9 gap flagged at line 1634; existing C++ atom cross-refs at line 713).
 
 I now have all the pieces verified from primary sources. Let me confirm the issue #2658 detail (which FA4's `dump_kernel_attributes` credits) and the B200 sm_100 smem figure, then write the cheatsheet.
 

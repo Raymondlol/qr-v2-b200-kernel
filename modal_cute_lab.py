@@ -9,8 +9,8 @@ crash and (b) makes this Modal loop a faithful proxy for the board -> we can ite
 instead of burning gpumode submissions.
 
 Run:
-  /Users/raymond/Downloads/SubPY/.modalenv/bin/modal run modal_cute_lab.py            # info + smoke
-  /Users/raymond/Downloads/SubPY/.modalenv/bin/modal run modal_cute_lab.py::info      # introspection only
+  modal run modal_cute_lab.py            # info + smoke
+  modal run modal_cute_lab.py::info      # introspection only
 """
 import pathlib, modal
 HERE = pathlib.Path(__file__).parent

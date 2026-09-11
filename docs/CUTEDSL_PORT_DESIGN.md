@@ -272,10 +272,10 @@ def custom_kernel(data):
 **M1 test commands (Modal cute-dsl B200 harness, built in M0):**
 ```
 # correctness (fast 22-case gate, all paths)
-/Users/raymond/Downloads/SubPY/.modalenv/bin/modal run modal_cutedsl_lab.py \
+modal run modal_cutedsl_lab.py \
     --mode correctness --subs "experiments/cute_qr_m1.py"
 # whole-kernel A/B vs V10 (one config/run, fresh buffers)
-/Users/raymond/Downloads/SubPY/.modalenv/bin/modal run modal_cutedsl_lab.py \
+modal run modal_cutedsl_lab.py \
     --mode compare --subs "experiments/cand_fused.py,experiments/cute_qr_m1.py"
 # pre-submit static scan (MUST be empty)
 grep -niE "stream|graph" experiments/cute_qr_m1.py

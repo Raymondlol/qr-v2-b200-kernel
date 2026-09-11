@@ -49,7 +49,7 @@ baseline from a *different* run) had two structural flaws that repeatedly bit us
 
 ## Example
 ```bash
-source .modalenv/bin/activate   # or use /Users/raymond/Downloads/SubPY/.modalenv/bin/modal
+source .modalenv/bin/activate   # or use modal
 modal run modal_lab.py --mode correctness --subs "experiments/cand_new.py"
 modal run modal_lab.py --mode compare --subs "submission.py,experiments/cand_new.py"
 modal run modal_lab.py --mode profile --subs "submission.py"

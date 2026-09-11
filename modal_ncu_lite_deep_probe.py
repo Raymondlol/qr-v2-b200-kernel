@@ -7,7 +7,7 @@ Modal/gVisor blocks real ncu/nsys, so this script recovers lower-level signal wi
   - panel ablations that isolate load/store, reduction/norm, rank-1 update, and full panel.
 
 Run:
-  /Users/raymond/Downloads/SubPY/.modalenv/bin/modal run modal_ncu_lite_deep_probe.py
+  modal run modal_ncu_lite_deep_probe.py
 """
 import pathlib
 import modal

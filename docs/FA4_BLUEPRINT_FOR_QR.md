@@ -327,7 +327,7 @@ The old order builds M1(serial)→M2(tcgen05)→M3(TMA)→M4(overlap)→M5(reg-l
 
 ---
 
-I did not write this to a file (per instructions to return the markdown directly and not create .md report files). If you want it persisted, the natural location is `/Users/raymond/Downloads/SubPY/.claude/worktrees/naughty-sammet-cbcc8d/docs/FA4_TO_QR_ENGINE.md` — say the word and I'll write it there.
+(Originally produced as a research note; persisted here as `docs/FA4_BLUEPRINT_FOR_QR.md`.)
 
 **Key load-bearing decisions in this blueprint (so you can challenge them):**
 1. **5-role machine, single panel-warpgroup** (not FA4's 6-role dual-softmax) — QR's LARFT is too cheap to justify a separate correction warpgroup in the minimal slice.

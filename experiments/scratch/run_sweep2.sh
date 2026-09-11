@@ -1,5 +1,5 @@
 #!/bin/zsh
-PY=/Users/raymond/opt/anaconda3/bin/python
+PY=python
 SIM="$(dirname $0)/fp8_ozaki_sim.py"
 OUT="$(dirname $0)/sweep_out2.txt"
 : > "$OUT"

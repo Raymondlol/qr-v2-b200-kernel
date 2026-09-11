@@ -1,0 +1,25 @@
+# NOTICE — third-party code in this repository
+
+The MIT license in `LICENSE` covers the code I wrote: `submission.py`,
+`milestones/`, `experiments/`, `modal_*.py`, `docs/`, `results/`, and
+`harness/{check_local,gpu_bench,lab,profile_workload}.py`.
+
+The following files are **not** mine and are **not** covered by that license.
+They are vendored so the benchmark is reproducible; their own upstream licenses
+apply and you should consult upstream before reusing them.
+
+| File | Origin | Notes |
+|---|---|---|
+| `harness/eval.py` | GPU MODE `kernelbot` / `reference-kernels` evaluation harness | Upstream file; locally prepended `from __future__ import annotations` for py3.8. |
+| `harness/reference.py` | GPU MODE `qr_v2` task definition (reference implementation + correctness gates) | Upstream file; same py3.8 tweak. This is the competition's own spec — the tolerances here define what "correct" means. |
+| `harness/task.py` | Shim for the upstream `task.py` | Upstream uses `TypedDict`/`NotRequired` (py3.11); this is a 10-line py3.8 stand-in written by me. |
+| `harness/utils.py` | GPU MODE harness, itself adapted from [LinkedIn Liger-Kernel](https://github.com/linkedin/Liger-Kernel) (see the attribution comment in the file) | Upstream file, unmodified. |
+
+Competition: GPU MODE `qr_v2` leaderboard — https://www.gpumode.com/leaderboard/774
+
+`archive/leader_top3/README.md` and `docs/HOW_LEADERS_ARE_FAST.md` analyse other
+competitors' submissions. Those submissions were published on the leaderboard
+after the deadline; **no third-party source code is reproduced in this
+repository** — those documents are my own notes and index into publicly posted
+code. All architectural descriptions there are my reading of that public code,
+not a claim about anyone's intent.

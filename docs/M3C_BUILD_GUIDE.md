@@ -601,11 +601,11 @@ de-risks the sign/index convention before any GEMM wiring.**
 ```
 
 Key files (all absolute):
-- `/Users/raymond/Downloads/SubPY/experiments/cute_qr_m2b.py` — overlap loop + panel/apply/warp_reduce to copy
-- `/Users/raymond/Downloads/SubPY/experiments/cute_gemm_tf32x3.py` — tcgen05 tf32x3 + TmemAllocator + 3-pass + TMEM read-back
-- `/Users/raymond/Downloads/SubPY/experiments/cute_qr_m1b.py` — blocked QR convention
-- `/Users/raymond/Downloads/SubPY/experiments/cute_qr_m2a.py` — per-warp setmaxregister
-- `/Users/raymond/Downloads/SubPY/.claude/worktrees/dreamy-johnson-cc42cd/experiments/fused_qr_slice.py` — LARFT recurrence (L81-91) + 2-GEMM apply (L93-130), the bit-identical reference
-- target to write: `/Users/raymond/Downloads/SubPY/experiments/cute_qr_m3c.py`
+- `experiments/cute_qr_m2b.py` — overlap loop + panel/apply/warp_reduce to copy
+- `experiments/cute_gemm_tf32x3.py` — tcgen05 tf32x3 + TmemAllocator + 3-pass + TMEM read-back
+- `experiments/cute_qr_m1b.py` — blocked QR convention
+- `experiments/cute_qr_m2a.py` — per-warp setmaxregister
+- `experiments/fused_qr_slice.py` — LARFT recurrence (L81-91) + 2-GEMM apply (L93-130), the bit-identical reference
+- target to write: `experiments/cute_qr_m3c.py`
 
 One correction to the design inputs worth flagging to the team: finding [1]'s SMEM table claims "sH[N,N]=164KB" but M3c uses **gmem H with small SMEM staging** (m2b reads reflectors straight from gmem) — the real SMEM budget is ~37 KB (in-reg split) / ~80 KB (host-split), not 168 KB; SMEM is not the binding constraint, TMEM (1 CTA/SM) is. The guide above uses the correct ~37 KB figure.

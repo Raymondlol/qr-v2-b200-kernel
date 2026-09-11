@@ -1,5 +1,7 @@
 # Modal virtualenv (51MB, recreate with: python3.12 -m venv .modalenv && .modalenv/bin/pip install modal python-socks)
 .modalenv/
+.venv/
+venv/
 
 # Python caches
 __pycache__/
@@ -10,5 +12,10 @@ __pycache__/
 .triton/
 *.ncu-rep
 *.nsys-rep
-experiments/cute_ref/
+
+# Agent / tooling scratch (never commit)
+.claude/
+.codex_worktrees/
+
+# OS junk
 .DS_Store

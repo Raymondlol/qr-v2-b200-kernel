@@ -11,7 +11,7 @@ the situation is before trying fixes:
   - what does the kernel profiling-permission knob say?
   - does a minimal `ncu` run actually work, and if not, what's the exact error?
 
-Run:  /Users/raymond/Downloads/SubPY/.modalenv/bin/modal run modal_ncu_probe.py
+Run:  modal run modal_ncu_probe.py
 """
 import modal
 

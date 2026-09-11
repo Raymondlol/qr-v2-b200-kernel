@@ -105,7 +105,7 @@ problem's shape, period.**
 
 ## 6. Codex `verify-qr-v2-new-levers` branch = REWARD-HACKS — DO NOT USE (DQ risk)
 
-These changes are **UNCOMMITTED in the MAIN worktree** `/Users/raymond/Downloads/SubPY` (not in
+These changes are **UNCOMMITTED in the MAIN worktree** (not in
 this worktree).
 
 - `_structured_stop` inspects `A[:,0,384:]` (**FIRST matrix only**) + hardcodes

@@ -3,7 +3,7 @@ Decisive questions for OUR competition (eval = torch+triton, NO nvcc):
   (A) is `cutlass`/cute-dsl PRE-PRESENT in a bare torch+triton image? (= the eval proxy)
   (B) if pip-installed, does it import + JIT-compile + RUN a trivial kernel on B200 WITHOUT nvcc
       (i.e. via the driver PTX JIT, the same path Triton uses) -> deployable-IF-present?
-Run: /Users/raymond/Downloads/SubPY/.modalenv/bin/modal run modal_cutedsl_test.py
+Run: modal run modal_cutedsl_test.py
 """
 import pathlib, modal
 

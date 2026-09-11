@@ -28,8 +28,8 @@
 | `modal_kernel_analysis.py` (original substitute) | kineto timeline + compiled resources + multi-config **panel SASS** (4 reg-variants) + the gVisor methodology. |
 | `modal_ncu_probe.py`, `modal_ncu_probe2b.py` | diagnostics that PROVE ncu/nsys are gVisor-blocked (env, /dev/nvidia*, ncu error). |
 ```
-/Users/raymond/Downloads/SubPY/.modalenv/bin/modal run modal_ncu_lite_deep_probe.py
-/Users/raymond/Downloads/SubPY/.modalenv/bin/modal run modal_kernel_analysis.py
+modal run modal_ncu_lite_deep_probe.py
+modal run modal_kernel_analysis.py
 ```
 
 ## 2. Timeline breakdown (n=512 b=640, GPU self-time/iter, total ≈ 12252 µs)

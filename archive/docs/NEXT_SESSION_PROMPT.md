@@ -78,7 +78,7 @@ Optionally the solve→fp32 reseed-DQ robustness variant (`experiments/cand_fp16
    cuBLAS-trailing/smem-streaming-panel — all measured-dead).
 
 ## ENV
-Mac, no local GPU; B200 via Modal (absolute path): `/Users/raymond/Downloads/SubPY/.modalenv/bin/modal`.
+Mac, no local GPU; B200 via Modal (absolute path): `modal`.
 - Single script: `… modal run modal_microbench.py --script experiments/<x>.py`
 - Lab compare: `… modal run modal_lab.py --mode compare --subs "submission.py,experiments/<cand>.py"`
 - Correctness gate: `… modal run modal_lab.py --mode correctness --subs "experiments/<cand>.py"`
