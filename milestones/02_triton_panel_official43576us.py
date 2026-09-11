@@ -1,3 +1,8 @@
+# === milestone: Triton panel ===
+# Official GPU MODE qr_v2 geomean: 43,576 us.
+# Runnable as-is; this is the scored artifact, not a cleaned-up rewrite.
+# Ladder + per-file provenance: milestones/README.md
+#
 # Batched square Householder QR (compact-WY) with a FUSED Triton panel kernel.
 #
 # *** STATUS: the Triton kernel is UNVERIFIED ON HARDWARE. ***

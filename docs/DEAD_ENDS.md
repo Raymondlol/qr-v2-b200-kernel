@@ -1,7 +1,54 @@
 # Dead ends — DO NOT re-explore these (each was tested or rigorously evaluated)
 
+## §0. The most expensive dead end was one I invented: banning the substring `graph`
+**This is the only entry on this page that was never measured, because I never let myself measure
+it.** It cost more than any of the real dead ends below, and it is the single most useful thing on
+this page for anyone else entering a kernel competition.
+
+**What I believed.** The submission checker is a naive static substring scan. I recorded the rule as
+"the file must not contain `stream` **or** `graph` anywhere, comments included", and enforced it as a
+pre-submit gate (`grep -niE "stream|graph" submission.py` must be empty) in `CLAUDE.md`,
+`README.md`, and every session handover, for the entire competition.
+
+**What was actually true.** Only **`stream`** is banned. The `graph` half I made up — most likely by
+generalising from the real rejection (which was a `stream` hit) plus the fact that CUDA graphs are
+usually captured *on a stream*, so the two felt like one rule. I never tested it. Testing it would
+have cost one submission.
+
+**How I know.** After the deadline the top submissions were published. The 3rd-place entry
+(`docs/leader_top3/README.md`, entry **C**) builds an **explicit-node CUDA graph**
+(`cudaGraphAddKernelNode` / `og_graph_build` / `og_graph_launch`) and uses the token `graph` freely
+throughout. Its own source comment states the constraint exactly: *"NO capture API used (grep -ic on
+the banned token == 0)"* — i.e. they avoided the **capture API** (which needs a stream) and used the
+explicit-node API instead, and they knew the banned token was `stream` alone. They built the entry
+around the constraint. I built my constraint around a guess.
+
+**What it cost.** This is the expensive part. My own profiling
+(`results/deepdive_launchgap_raw.txt`, `docs/PROFILING.md` §8) measured the small-n cases at
+**40–48% launch-bound** — i.e. nearly half the wall clock at n=32/176/352 is GPU idle between
+kernels. **Launch-gap elimination is exactly what a CUDA graph is for**, and it is one of the three
+levers the post-mortem (`docs/HOW_LEADERS_ARE_FAST.md`) identifies in the leaders' code. Instead I
+spent that budget attacking the same gap indirectly — V9 glue fusion (+2.1% official) and V10's
+fused one-shot kernel (−7.7%) — both of which were real wins, but both of which were working around
+a wall that wasn't there. I cannot say what a graph would have been worth, because I never measured
+it, and that is the point.
+
+**Generalised lesson (the one worth taking).** I was rigorous about every number and sloppy about the
+one *rule* that shaped which numbers I was allowed to collect. A constraint is a measurement like any
+other: it has a provenance, it can be stale, it can be wrong, and it deserves the same
+"where-did-this-come-from" audit as a benchmark result. The cheapest possible experiment — submit a
+file containing the word `graph` in a comment, once, early — would have settled it. Constraints that
+*shrink the search space* should be the **first** thing verified, not the thing inherited across
+twenty session handovers.
+
+> Status of the rule now: `stream` is genuinely banned — that one cost me two real submissions and is
+> confirmed. `graph` is fine. `submission.py` is still `stream`-free; the pre-submit gate in this repo
+> now greps for `stream` only.
+
+---
+
 ## implicit-V DLARFB apply (load V from H with a triangular mask, no torch.tril) — MODAL +4% but OFFICIAL REGRESSION -3.9% → REVERTED (2026-06-26, SubmissionV7)
-Rewrote `_apply_block` (n≤512) so V is never materialized: 3 tf32x3 Triton kernels (`_iv_VtV` gram, `_iv_VtC`, `_iv_VYsub` in-place) load V[r,i]=0/1/H[col+r,col+i] with a triangular mask, killing the `torch.tril` write + glue. **Lab (same-container, 12 reps) = 1.040× FASTER, 22/22, no regressions** (n176 −13.5%, n352 −12%, n512 ~−2.9%). **BUT official gpumode = ~6145µs geomean vs V5 5915 = +3.9% SLOWER — the Modal gain REVERSED.** Same trap as fp16x3 (V6). Mechanism: implicit-V trades the tril HBM write for per-load triangular-mask ALU (`tl.where`×2 in the gram, paid 3× across gram/W/update) — the official toolchain/HW does NOT favor that trade (Modal did); also 3 fresh per-shape-autotuned kernels are likely worse than the single shared battle-tested `_bmm_x3_kernel`. **Reverted to byte-identical V5.** Artifact: `experiments/cand_implicitV.py`, `milestones/submissionV7_implicitV_modal5870.py`, tag `submissionV7-implicitV`, full record `results/implicitV_WIN.txt`. **LESSON (3rd time — fp16x3, now implicit-V): a sub-5% Modal geomean delta is NOT trustworthy; gate on a real gpumode submission BEFORE shipping.** GPT's broader "rewrite apply" plan was otherwise dead (its solve→inverse step = the already-dead cand_tsolve; its "2×" a magnitude error).
+Rewrote `_apply_block` (n≤512) so V is never materialized: 3 tf32x3 Triton kernels (`_iv_VtV` gram, `_iv_VtC`, `_iv_VYsub` in-place) load V[r,i]=0/1/H[col+r,col+i] with a triangular mask, killing the `torch.tril` write + glue. **Lab (same-container, 12 reps) = 1.040× FASTER, 22/22, no regressions** (n176 −13.5%, n352 −12%, n512 ~−2.9%). **BUT official gpumode = ~6145µs geomean vs V5 5915 = +3.9% SLOWER — the Modal gain REVERSED.** Same trap as fp16x3 (V6). Mechanism: implicit-V trades the tril HBM write for per-load triangular-mask ALU (`tl.where`×2 in the gram, paid 3× across gram/W/update) — the official toolchain/HW does NOT favor that trade (Modal did); also 3 fresh per-shape-autotuned kernels are likely worse than the single shared battle-tested `_bmm_x3_kernel`. **Reverted to byte-identical V5.** Artifact: `experiments/cand_implicitV.py`, `milestones/07_V7_implicitV_official6145us_REGRESSION.py`, tag `submissionV7-implicitV`, full record `results/implicitV_WIN.txt`. **LESSON (3rd time — fp16x3, now implicit-V): a sub-5% Modal geomean delta is NOT trustworthy; gate on a real gpumode submission BEFORE shipping.** GPT's broader "rewrite apply" plan was otherwise dead (its solve→inverse step = the already-dead cand_tsolve; its "2×" a magnitude error).
 
 ## Precision below tf32x3 — MANTISSA wall was a TF32-SOLVE artifact; fp16x3 now SHIPPED, fp8/fp4 SPEED-dead (CORRECTED + MEASURED 2026-06-26, branch `fp8-fp4-attack`)
 **The old "1×TF32 fails / no room below tf32x3 / fp8 DEAD / fp16x3 ~wash" claims were WRONG and are overturned.** See `archive/docs/FP8_SESSION_PROGRESS.md` + memory `qr-v2-solve-tf32-floor-artifact`. The mixed@640 ~1.9× margin that looked like a trailing-GEMM floor was caused ENTIRELY by `torch.linalg.solve_triangular` running in tf32 (`allow_tf32=True` is global, so cuBLAS trsm honors it). Attribution on the REAL custom_kernel (`experiments/microbench_attrib.py`, 3 seeds): real (tf32 solve) margin **1.82×**; `allow_tf32=False` everywhere **797×**; tf32 ON but ONLY solve→fp32 **797×** (IDENTICAL → the solve is the SOLE culprit at n≤512); solve→fp64 **833×**. So at n≤512 the trailing GEMM was NEVER the binding constraint — tf32x3/fp16x3 there have ~800× precision headroom that was masked by the tf32 solve. (n≥1024 uses 1×TF32 trailing, so solve→fp32 only lifts n1024-mixed 1.96×→2.09×.) The solve-fix lives in `experiments/cand_fp16x3_solvefix.py` (+2.4% geomean AND margin 800×, 22/22).
@@ -15,7 +62,7 @@ Rewrote `_apply_block` (n≤512) so V is never materialized: 3 tf32x3 Triton ker
 ## Large-n custom path
 - **Custom two-level for n=4096 (small ib so SRAM fits): DEAD (cand_U).** n=2048 687ms, n=4096 1228ms — 9-22× WORSE than geqrf. batch=2-8 → only 2-8 one-program-per-matrix CTAs on 148 SMs = catastrophic occupancy. `experiments/cand_U_customLargeN.py`. **NOTE: this was tested with default-4-warp panel; re-tested WITH panel-warps (cand_X) it WINS n=2048 but still loses n=4096.**
 - **geqrf-panel (wide block) + TF32 trailing: DEAD (cand_G/N).** ≈ geqrf — a wide cuSOLVER panel on [2048,512] costs ≈ the whole thing; narrow blocks add per-call overhead. `experiments/cand_N_largeN512.py`.
-- **Stream-parallel geqrf (one CUDA stream per matrix): ILLEGAL.** Worked great (n=2048 77k→17k) but submission checker rejects any "stream" usage. `experiments/_INVALID_cand_L_streamgeqrf.py`. Same for CUDA graphs.
+- **Stream-parallel geqrf (one CUDA stream per matrix): ILLEGAL.** Worked great (n=2048 77k→17k) but submission checker rejects any "stream" usage. `experiments/_INVALID_cand_L_streamgeqrf.py`. ⚠️ **CORRECTED:** this entry used to end "Same for CUDA graphs." That was wrong — see §0. Graphs are legal via the explicit-node API (no stream needed); the 3rd-place submission used them. Only the *capture* API is out of reach, because capture requires a stream.
 - **TSQR → flat output: legal but washes.** TSQR's tree reflectors don't fit the flat layout directly, BUT Householder-reconstruction (form Q explicitly O(n³) + LU-without-pivoting of top n×n block → unit-lower Y=v_i, τ from diagonal) recovers valid flat (H,τ). It ~3×'s the per-matrix flop and must still beat cuSOLVER on n=2048/4096 → wash. (workflow verdict, high confidence)
 
 ## Full mega-kernel (one CTA does panel + trailing) — NOT MOTIVATED by the trailing microbench (fusion benefit UNMEASURED)

@@ -1,0 +1,17 @@
+# B200 lab image (Modal). This is a DOCUMENTED RECONSTRUCTION, not a lockfile the
+# original runs used -- see the TORCH_SPEC banner in modal_lab.py. The competition-era
+# runs installed torch unpinned, so the numbers in results/ cannot be reproduced
+# bit-for-bit. Every lab run now records its resolved torch/triton/CUDA versions into
+# results/lab_log.jsonl ("env" key) so this can't happen again.
+#
+#   modal>=1.5.1                  # local driver (not installed in the image)
+#   python 3.12                   # modal.Image.debian_slim(python_version="3.12")
+#   torch==2.12.0                 # from https://download.pytorch.org/whl/cu128
+#   numpy
+#
+# The cute-DSL replica image (modal_cute_lab.py) was pinned from the start and is
+# the one image here that IS reproducible:
+#   nvidia/cuda:12.9.1-devel, python 3.13, torch==2.12.0,
+#   nvidia-cutlass-dsl==4.5.2, cuda-python==13.0, numpy~=2.3
+torch==2.12.0
+numpy

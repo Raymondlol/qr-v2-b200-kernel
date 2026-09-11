@@ -82,5 +82,5 @@ on PASS); v2 encodes the answer in PASS/FAIL.
 warp-role table, overlap handshake, reg-realloc, M-plan reorder) · `docs/CUTEDSL_CHEATSHEET.md` (4.5.2 API,
 verbatim) · `docs/CUTEDSL_PORT_DESIGN.md` (M-plan + kill-criteria; banner-superseded by FA4 §8) ·
 `experiments/cute_ref/` (gitignored NVIDIA example sources — re-fetch via cheatsheet URLs) · FA source at
-`~/Downloads/flash-attention-main 2/flash_attn/cute` (flash_fwd_sm100.py mma(), pipeline.py, blackwell_helpers.py).
+`<local scratch> 2/flash_attn/cute` (flash_fwd_sm100.py mma(), pipeline.py, blackwell_helpers.py).
 Session commits: `b691c0c` (M0-M2b), `6515fa9` (M3a), `49178b6` (M3c-pre + guide).

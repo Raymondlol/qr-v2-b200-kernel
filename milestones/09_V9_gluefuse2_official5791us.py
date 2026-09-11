@@ -1,3 +1,8 @@
+# === milestone: V9 (full glue fusion) ===
+# Official GPU MODE qr_v2 geomean: 5,791 us, leaderboard submission id 838173.
+# Runnable as-is; this is the scored artifact, not a cleaned-up rewrite.
+# Ladder + per-file provenance: milestones/README.md
+#
 # === SubmissionV9 = V5 + glue fusion (M-builder + V-builder + M^T-no-transpose) — OFFICIAL 5791us CONFIRMED (V5 5915, -2.1%, best) ===
 # Phase 1a proxy: ib=64 for n=512 (fused-panel route, fewer narrow updates).
 # qr_v2 submission: batched compact-Householder QR for B200. (n=2048 routed to

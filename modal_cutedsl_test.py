@@ -8,9 +8,16 @@ Run: modal run modal_cutedsl_test.py
 import pathlib, modal
 
 # Image 1 = the eval proxy: torch + triton ONLY (matches modal_microbench / the official eval).
+# Pinned 2026-09-11. The original runs did NOT pin torch, which means the lab numbers in
+# results/ cannot be reproduced bit-for-bit -- a real gap in a project whose central claim
+# is that codegen-sensitive results do not transfer. 2.12.0 is the version modal_cute_lab.py
+# was pinned to during the same sessions. If it fails to resolve, set TORCH_SPEC = "torch"
+# and record what actually got installed (every lab run now prints it).
+TORCH_SPEC = "torch==2.12.0"
+
 bare = (modal.Image.debian_slim(python_version="3.12")
         .pip_install("numpy")
-        .pip_install("torch", index_url="https://download.pytorch.org/whl/cu128"))
+        .pip_install(TORCH_SPEC, index_url="https://download.pytorch.org/whl/cu128"))
 # Image 2 = torch+triton + the cute-dsl wheel, but NO cuda-devel (so NO nvcc) -> tests driver-JIT path.
 # Pin to the EVAL version (4.5.2) so a green probe means our Modal loop matches the board.
 withdsl = bare.pip_install("nvidia-cutlass-dsl==4.5.2")

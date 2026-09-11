@@ -1,3 +1,8 @@
+# === milestone: eager baseline ===
+# Official GPU MODE qr_v2 geomean: 123,203 us.
+# Runnable as-is; this is the scored artifact, not a cleaned-up rewrite.
+# Ladder + per-file provenance: milestones/README.md
+#
 # Batched square Householder QR (compact-WY / blocked) matching torch.geqrf.
 # Design priority: robustness first, performance-aware structure second.
 #

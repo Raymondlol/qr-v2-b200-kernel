@@ -2,10 +2,10 @@
 https://modal.com/apps/raymxnd/main/ap-oedWuyUbMq3HrdGnAXbqaX
 ✓ Created objects.
 ├── 🔨 Created mount 
-│   /Users/raymond/Downloads/SubPY/.claude/worktrees/dreamy-johnson-cc42cd/modal
+│   <repo>/modal
 │   _lab.py
 ├── 🔨 Created mount 
-│   /Users/raymond/Downloads/SubPY/.claude/worktrees/dreamy-johnson-cc42cd/harne
+│   <repo>/harne
 │   ss
 └── 🔨 Created function run.
 torch 2.11.0+cu128 | dev NVIDIA B200
@@ -24,7 +24,7 @@ submission.py                                     5419.9    (base)
 -----STDERR (tail)-----
 
 
-[lab] result appended to /Users/raymond/Downloads/SubPY/.claude/worktrees/dreamy-johnson-cc42cd/results/lab_log.jsonl
+[lab] result appended to <repo>/results/lab_log.jsonl
 Stopping app - local entrypoint completed.
 ✓ App completed. View run at 
 https://modal.com/apps/raymxnd/main/ap-oedWuyUbMq3HrdGnAXbqaX

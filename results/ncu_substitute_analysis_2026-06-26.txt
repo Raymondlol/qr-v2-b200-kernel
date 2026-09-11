@@ -2,12 +2,12 @@
 https://modal.com/apps/raymxnd/main/ap-REmnD6946mFCn1olVuz9rO
 ✓ Created objects.
 ├── 🔨 Created mount 
-│   /Users/raymond/Downloads/SubPY/.claude/worktrees/epic-mestorf-c6455f/modal_k
+│   <repo>/modal_k
 │   ernel_analysis.py
 ├── 🔨 Created mount 
-│   /Users/raymond/Downloads/SubPY/.claude/worktrees/epic-mestorf-c6455f/harness
+│   <repo>/harness
 ├── 🔨 Created mount 
-│   /Users/raymond/Downloads/SubPY/.claude/worktrees/epic-mestorf-c6455f/submiss
+│   <repo>/submiss
 │   ion.py
 └── 🔨 Created function analyze.
 

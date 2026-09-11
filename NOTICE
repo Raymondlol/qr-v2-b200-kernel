@@ -17,7 +17,7 @@ apply and you should consult upstream before reusing them.
 
 Competition: GPU MODE `qr_v2` leaderboard — https://www.gpumode.com/leaderboard/774
 
-`archive/leader_top3/README.md` and `docs/HOW_LEADERS_ARE_FAST.md` analyse other
+`docs/leader_top3/README.md` and `docs/HOW_LEADERS_ARE_FAST.md` analyse other
 competitors' submissions. Those submissions were published on the leaderboard
 after the deadline; **no third-party source code is reproduced in this
 repository** — those documents are my own notes and index into publicly posted

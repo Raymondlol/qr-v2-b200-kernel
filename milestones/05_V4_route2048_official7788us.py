@@ -1,4 +1,13 @@
-# qr_v2 submission: batched compact-Householder QR for B200.
+# === milestone: V4 (route n=2048) ===
+# Official GPU MODE qr_v2 geomean: 7,788 us.
+# Runnable as-is; this is the scored artifact, not a cleaned-up rewrite.
+# NOTE: Committed originally as m5_route2048_est8100us.py -- "est" was a pre-submission
+#   estimate. The 7,788 attribution is high-confidence but not byte-proven; see
+#   milestones/README.md note 1.
+# Ladder + per-file provenance: milestones/README.md
+#
+# qr_v2 submission: batched compact-Householder QR for B200. (n=2048 routed to
+# custom one-CTA panel + warps; n=4096 to cuSOLVER.) Validated 22/22.
 # Validated: 22/22 official test cases pass; benchmark geomean ~10800us.
 #
 # Design (shape-routed; both paths are exact QR, never conditioning-routed):
@@ -202,14 +211,18 @@ def _blocking(n):
         return (16, 16)
     if n <= 256:
         return (64, 64)
-    return (256, 32)
+    if n <= 1024:
+        return (256, 32)
+    if n <= 2048:
+        return (256, 16)
+    return (256, 8)
 
 
 def _triton_ok(n, ib):
     if not _HAS_TRITON:
         return False
     BN = 1 << (n - 1).bit_length()
-    return n <= 1024 and BN * ib <= 64 * 1024
+    return BN * ib <= 48 * 1024
 
 
 def _factor_custom(A):
@@ -230,7 +243,12 @@ def _factor_custom(A):
                 m = n - col
                 BN = triton.next_power_of_2(m)
                 BCOLS = triton.next_power_of_2(b)
-                _panel_kernel[(B,)](H, tau, n, col, m, b, BN=BN, BCOLS=BCOLS)
+                # more warps parallelize the per-CTA tile work (the panel bottleneck
+                # at large m); the one-program-per-matrix CTA otherwise serializes a
+                # [BN, BCOLS] tile through BCOLS columns on just 4 warps.
+                nw = 4 if BN <= 128 else (8 if BN <= 512 else (16 if BN <= 1024 else 32))
+                _panel_kernel[(B,)](H, tau, n, col, m, b, BN=BN, BCOLS=BCOLS,
+                                    num_warps=nw)
             else:
                 _panel_factor(H[:, col:, col:col + b], tau[:, col:col + b])
             if j + b < nb:                       # narrow within-super-panel update
@@ -251,9 +269,20 @@ def custom_kernel(data):
     B, n, _ = A.shape
     if not A.is_cuda:
         return _factor_custom(A)
+    global _BIG_X3
+    if n >= 2048:
+        # one-CTA-per-matrix custom beats geqrf only with enough CTAs (=batch) to
+        # hide the tall panel: n=2048 b>=4 wins (35ms vs 77ms); n=4096 b<=2 loses
+        # (2 CTAs on 148 SMs) -> geqrf. (n=4096 needs a cooperative multi-CTA panel.)
+        if n <= 3072 and B >= 4:
+            _BIG_X3 = False            # 1xTF32 trailing (loose tol at large n)
+            try:
+                return _factor_custom(A)
+            except Exception:
+                return torch.geqrf(A)
+        return torch.geqrf(A)
     if _use_geqrf(B, n):
         return torch.geqrf(A)
-    global _BIG_X3
     _BIG_X3 = (n <= 512)           # tf32x3 fused for n<=512; 1xTF32 for n>=1024
     try:
         return _factor_custom(A)

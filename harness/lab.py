@@ -250,8 +250,16 @@ def main():
     else:
         print("unknown mode", mode); return
     # (5) structured result block (modal_lab.py extracts + appends to local log)
+    # Record the toolchain with every result. The original runs did not, which is why the
+    # numbers in results/ cannot be tied to an exact torch/triton build. See modal_lab.py.
+    try:
+        import triton; _triton_v = triton.__version__
+    except Exception:
+        _triton_v = None
+    env = {"torch": torch.__version__, "triton": _triton_v,
+           "cuda": torch.version.cuda, "device": torch.cuda.get_device_name(0)}
     print("\n===LAB_JSON===")
-    print(json.dumps({"mode": mode, "paths": paths, "t": time.time(), "result": r}))
+    print(json.dumps({"mode": mode, "paths": paths, "t": time.time(), "env": env, "result": r}))
     print("===END_LAB_JSON===")
 
 

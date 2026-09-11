@@ -1,0 +1,6 @@
+# CPU-side only — enough to run the free correctness gate:
+#     python harness/check_local.py submission.py 512
+# No GPU, no Triton, no Modal needed. Verified on CPython 3.8 / torch 2.2.2 and
+# on CPython 3.12 / torch 2.x.
+torch>=2.0
+numpy

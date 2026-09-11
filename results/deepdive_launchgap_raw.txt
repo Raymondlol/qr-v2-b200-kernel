@@ -2,10 +2,10 @@
 https://modal.com/apps/raymxnd/main/ap-6E4Pxk7dFaetA9CjjjEsOS
 ✓ Created objects.
 ├── 🔨 Created mount 
-│   /Users/raymond/Downloads/SubPY/.claude/worktrees/dreamy-johnson-cc42cd/modal
+│   <repo>/modal
 │   _deepdive_launchgap.py
 ├── 🔨 Created mount 
-│   /Users/raymond/Downloads/SubPY/.claude/worktrees/dreamy-johnson-cc42cd/submi
+│   <repo>/submi
 │   ssion.py
 └── 🔨 Created function run.
 dev NVIDIA B200 torch 2.11.0+cu128

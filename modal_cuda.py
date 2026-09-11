@@ -9,10 +9,17 @@ import modal
 
 HERE = pathlib.Path(__file__).parent
 
+# Pinned 2026-09-11. The original runs did NOT pin torch, which means the lab numbers in
+# results/ cannot be reproduced bit-for-bit -- a real gap in a project whose central claim
+# is that codegen-sensitive results do not transfer. 2.12.0 is the version modal_cute_lab.py
+# was pinned to during the same sessions. If it fails to resolve, set TORCH_SPEC = "torch"
+# and record what actually got installed (every lab run now prints it).
+TORCH_SPEC = "torch==2.12.0"
+
 image = (
     modal.Image.from_registry("nvidia/cuda:12.8.1-devel-ubuntu22.04", add_python="3.12")
     .pip_install("numpy", "ninja")
-    .pip_install("torch", index_url="https://download.pytorch.org/whl/cu128")
+    .pip_install(TORCH_SPEC, index_url="https://download.pytorch.org/whl/cu128")
     .add_local_dir(str(HERE / "experiments"), remote_path="/work", copy=True)
     .add_local_dir(str(HERE / "harness"), remote_path="/work/harness", copy=True)
 )

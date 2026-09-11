@@ -44,6 +44,43 @@ Reproduced by both profilers to within 0.2% → trustworthy.
 - Matches the older `panel 41 / gram 15 / trailing 26 / solve 18` profile (panel is ~43%, a touch
   higher). ~**55 kernel launches/iter** — many are tiny glue ops.
 
+## 2b. Peak fraction — what 5.5% does and does not mean
+The headline "we run n=512 at **5.5% of tf32x3 peak**" is a **whole-workload** figure. It is NOT the
+efficiency of the trailing GEMM, and conflating the two (an earlier version of `README.md` did) makes
+the GEMM look ~3x worse than it is and mis-aims the optimization.
+
+Reference peak: `results/deepdive_roofline_raw.txt` uses **eff tf32x3 peak ~= 165 TF/s** (B200 dense
+TF32 divided by the 3 passes tf32x3 costs).
+
+**Whole workload** (exact, no attribution assumptions):
+```
+useful QR flops = (4/3) * n^3 * batch = (4/3) * 512^3 * 640 = 1.145e11 FLOP
+wall time (§2 total)                                      = 12252 us
+                                    => 9.35 TF/s = 5.7% of 165 TF/s   (~5.5%, the quoted number)
+```
+
+**Trailing GEMM kernels alone** (bracketed, because the flop attribution is not exact):
+```
+tf32x3 kernel time (§2: _bmm_x3 x14 + _bmm_x3_sub x7) = 3366 us
+if those kernels carry 60% of the flops -> 20.4 TF/s = 12.4% of peak
+if 75%                                  -> 25.5 TF/s = 15.5% of peak
+if 90%                                  -> 30.6 TF/s = 18.6% of peak
+```
+The bracket is wide because (a) blocked compact-WY does **more** flops than the `(4/3)n^3` textbook
+count -- the `T`-multiply and the within-super-panel applies are extra -- and (b) some of that extra
+lands in the panel kernel, not the tf32x3 kernels. Round number to quote: **~15%**.
+
+**The actionable reading.** The GEMM at ~15% of peak is mediocre; it is not the problem. The problem
+is that 73% of the wall clock (panel 43% + solve 15% + glue 14%) does ~zero tensor-core work and is
+**serialized** with the GEMM. Making the GEMM 2x faster moves the geomean by a few percent; *hiding*
+the other 73% behind it is what takes the critical path to the GEMM alone. That is exactly the
+overlap lever measured in §7.1 and (for us) walled in `docs/DEAD_ENDS.md`.
+
+Re-derive with:
+```bash
+python3 -c "n,b=512,640; f=(4/3)*n**3*b; print(f/12252e-6/1e12, 'TF/s ->', 100*f/12252e-6/165e12, '%')"
+```
+
 ## 3. ★ Panel component ablation (the headline NEW signal — Codex)
 Subtractive probe kernels time each stage of `_panel_kernel` (B=640 n=512 ib=64 nw=8). The
 `_panel_full_probe` was verified **bit-identical** to the production `_panel_kernel`
@@ -103,17 +140,31 @@ serial reflector-reduction chain** (SHFL-heavy), not FMA-throughput-bound, not a
    added mask-ALU and regressed officially; see DEAD_ENDS). Whether it nets out is HW-dependent →
    gate on a real gpumode submission.
 
-## 8. Still un-measured (cheap next steps with the SAME toolchain — no ncu needed)
-- **Roofline-via-shapes**: compute FLOPs+bytes per kernel from known shapes → arithmetic intensity
-  → compute-vs-memory-bound. Turns the tool **predictive** (would have flagged the n=512
-  trailing/apply as compute-bound, i.e. that implicit-V's traffic cut can't help there). NOT built.
-- **Launch-gap / GPU-idle** = wall-clock − Σ(kernel durations). kineto has the timestamps; not yet
-  extracted. Large for small-n → the launch-bound headroom.
-- **Profile the small-n cases (n=176/352)**, only n=512 was profiled. Small-n has tiny matrices but
-  the same ~55 launches → almost certainly **launch/glue-bound**, a different regime the geomean
-  weights equally. This is the least-explored deployable territory.
+## 8. Follow-ups — status
+> This section used to list these as "NOT built". They were built the next day, on branch
+> `profiling-deepdive`; raw output in `results/deepdive_*`, written up in
+> `results/deepdive_findings.md`. Leaving the stale "NOT built" text here made this file — the
+> canonical profiling record — contradict `README.md`. Fixed.
+
+- **Roofline-via-shapes** — **BUILT** (`experiments/deepdive_roofline.py`, free, exact shape
+  arithmetic; raw: `results/deepdive_roofline_raw.txt`). Establishes the B200 tf32x3 ridge at
+  ~20.6 FLOP/byte and confirms the n=512 trailing/apply is **compute-side** — i.e. it would have
+  predicted, in advance and for free, that implicit-V's traffic cut could not help there. It didn't
+  exist when implicit-V was shipped; that is why implicit-V was shipped.
+- **Launch-gap / GPU-idle** (= wall-clock − Σ kernel self-time) — **BUILT**
+  (`modal_deepdive_launchgap.py`; raw: `results/deepdive_launchgap_raw.txt`). Result: small-n is
+  **40–48% launch-bound**, n=512 only 1.9%. This is the single most important number in this file
+  for the small-n half of the geomean, and it is what motivated V9 glue fusion and V10's fused
+  one-shot kernel. **See also `docs/DEAD_ENDS.md` §0** — the other obvious answer to a 40–48%
+  launch gap was ruled out by a constraint I had invented and never checked.
+- **Profile the small-n cases (n=176/352)** — **STILL NOT DONE.** Only n=512 was ever profiled at
+  kernel granularity; the small-n conclusions above come from the aggregate launch-gap measurement,
+  not from a per-kernel timeline. This remains the least-explored territory in the repo.
+
+## 9. Still genuinely un-measured
 - **Real ncu** (occupancy / stall sampling / DRAM throughput / TC utilization): needs a non-gVisor
-  GPU host (Lambda/RunPod bare-metal/local). The competition eval box is likely locked down too.
+  GPU host (Lambda / RunPod bare-metal / local) — see §0. The competition eval box is likely locked
+  down the same way.
 
 ## Provenance / why two outputs
 Both profilers independently reproduced the timeline (panel 43.3 vs 43.4%) + every reg/spill/occ

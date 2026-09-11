@@ -7,11 +7,18 @@ both matched to driver 580. Answers: does a driver-matched ncu fix LibraryNotLoa
 """
 import modal
 
+# Pinned 2026-09-11. The original runs did NOT pin torch, which means the lab numbers in
+# results/ cannot be reproduced bit-for-bit -- a real gap in a project whose central claim
+# is that codegen-sensitive results do not transfer. 2.12.0 is the version modal_cute_lab.py
+# was pinned to during the same sessions. If it fails to resolve, set TORCH_SPEC = "torch"
+# and record what actually got installed (every lab run now prints it).
+TORCH_SPEC = "torch==2.12.0"
+
 image = (
     modal.Image.from_registry("nvidia/cuda:13.0.1-devel-ubuntu24.04", add_python="3.12")
     .apt_install("cuda-nsight-systems-13-0")  # NVIDIA-repo nsys matched to CUDA 13 (repo already in image)
     .pip_install("numpy")
-    .pip_install("torch", index_url="https://download.pytorch.org/whl/cu128")
+    .pip_install(TORCH_SPEC, index_url="https://download.pytorch.org/whl/cu128")
 )
 app = modal.App("qr-ncu-probe2b")
 

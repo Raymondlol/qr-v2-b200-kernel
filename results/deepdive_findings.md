@@ -86,6 +86,6 @@ The n=512 gain is the M^T-no-transpose removing the cuSOLVER copy (real op+traff
 + bit-identical (margin preserved). Promoted to branch submission.py (= "V9"); V8 archived per request.
 
 ARCHIVES: milestones/submissionV8_gluefuse_modal5402.py (A = M-fusion, +5.2%) + a standalone copy at
-~/Downloads/submissionV8_gluefuse_modal5402.py; milestones/submissionV9_gluefuse2_modal5298.py (the (b)
+<local scratch>; milestones/submissionV9_gluefuse2_modal5298.py (the (b)
 result, ~+7.4%). main UNTOUCHED = V5 5915 official. NEXT: gpumode-confirm the cumulative win (bit-identical
 -> zero correctness/margin risk; structural -> should transfer far better than the fp16x3/implicit-V artifacts).

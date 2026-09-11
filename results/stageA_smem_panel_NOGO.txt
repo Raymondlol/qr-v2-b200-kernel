@@ -24,13 +24,13 @@ Built image im-GDELlIe1gAsEMSkt2cMm3Z in 1.49s
 
 ✓ Created objects.
 ├── 🔨 Created mount 
-│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/modal_m
+│   <repo>/modal_m
 │   icrobench.py
 ├── 🔨 Created mount 
-│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/experim
+│   <repo>/experim
 │   ents
 ├── 🔨 Created mount 
-│   /Users/raymond/Downloads/SubPY/.claude/worktrees/bold-shannon-6a7521/harness
+│   <repo>/harness
 └── 🔨 Created function run.
 dev NVIDIA B200 triton 3.6.0
   B4 M 128 b64 RBLK64: H relerr=1.52e-07 tau relerr=1.74e-07 OK | n_regs=101 spills=0

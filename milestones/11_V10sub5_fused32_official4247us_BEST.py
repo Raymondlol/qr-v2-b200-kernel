@@ -1,19 +1,49 @@
-# === SubmissionV10-sub5 (fused32/ib32/nw2) = OFFICIAL ~4247us (id 840028) = BEST. V10 + route n<=64/B>16 to the fused Triton QR kernel (IB=32, nw=2) instead of geqrf (b20-n32 dense 318->30us). Built on V9 (V5 + glue fusion). ===
-# Phase 1a proxy: ib=64 for n=512 (fused-panel route, fewer narrow updates).
-# qr_v2 submission: batched compact-Householder QR for B200. (n=2048 routed to
-# custom one-CTA panel + warps; n=4096 to cuSOLVER.) Validated 22/22.
-# Validated: 22/22 official test cases pass; benchmark geomean ~10800us.
+# qr_v2 — batched compact-Householder QR for NVIDIA B200.
 #
-# Design (shape-routed; both paths are exact QR, never conditioning-routed):
-#   * tiny-n (n<=64) or small-batch (<=16): torch.geqrf (cuSOLVER wins there).
-#   * large-batch medium-n: two-level blocked Householder ->
-#       - super-panel width NB=256 from ib=32-wide fused Triton sub-panels;
-#       - one fat K=NB trailing update on the rest (tensor-core GEMM);
-#       - T-factor via one batched triangular solve, T=(diag(1/tau)+striu(VtV))^-1;
-#       - big trailing GEMMs for n<=512 via a fused tf32x3 Triton kernel
-#         (emulated-FP32 in-register; large mixed batches need that accuracy);
-#         n>=1024 uses plain 1xTF32 (looser relative tolerance).
-# Tolerances have ~1000x FP32 margin, which is what makes the TF32 paths valid.
+# Version:  V10-sub5      Official geomean: 4247 us (leaderboard submission id 840028)
+# Contract: (H, tau) flat compact-Householder — R = triu(H), reflector j in
+#           strict_lower(H)[:, j], coefficients in tau. The checker rebuilds Q with
+#           torch.linalg.householder_product, which reads only strict_lower(H) + tau.
+# Gate:     22/22 official correctness cases; 12 cases are scored (geomean).
+#
+# Shape routing (SHAPE ONLY — never conditioning; every path below is an exact QR,
+# so an ill-conditioned matrix inside a "mixed" batch factors correctly on its own
+# merits. Conditioning-based routing would be a correctness bug, not an optimization):
+#
+#   n <= 64,  B >  16          -> fused one-shot Triton kernel, IB=32, nw=2.
+#                                 (This is the V10-sub5 change: it takes n<=64 AWAY
+#                                 from cuSOLVER. b=20/n=32 dense went 318 -> 30 us.)
+#   n <= 64,  B <= 16          -> torch.geqrf (too few matrices to fill the GPU).
+#   n <= 256, or n <= 512 and B >= 128
+#                              -> fused one-shot Triton kernel: 1 CTA factors 1 whole
+#                                 matrix (in-kernel blocked Householder -> LARFT T ->
+#                                 compact-WY apply). The batch supplies occupancy, so
+#                                 the win is launch + HBM-traffic elimination.
+#   other n <= 1024            -> host-driven two-level blocked Householder: super-panel
+#                                 NB=256 built from ib=32 fused sub-panels, one batched
+#                                 triangular solve for T = (diag(1/tau) + striu(V'V))^-1,
+#                                 one fat K=NB trailing GEMM.
+#   n = 2048, B >= 4           -> custom one-CTA-per-matrix panel + 1xTF32 trailing.
+#   n >= 4096                  -> torch.geqrf. With 2 matrices there are 2 CTAs of work;
+#                                 cuSOLVER parallelizes one matrix across the whole GPU.
+#
+# Precision: the trailing GEMM is tf32x3 (three TF32 passes accumulated in FP32,
+#   ~22 mantissa bits, full FP32 exponent range) for n <= 512, and plain 1xTF32 for
+#   n >= 1024 where the tolerance scales with n. This is NOT a comfortable margin:
+#   plain 1xTF32 at n=512 puts the worst of 640 matrices at ~19.7 against a gate of
+#   20 (i.e. 1.02x — a coin flip against the seed), which is why tf32x3 is mandatory
+#   there. Panel reductions stay FP32; a low-precision panel corrupts the reflectors.
+#   Known residual issue: solve_triangular silently runs in TF32 here. Forcing it to
+#   FP32 costs ~1% and buys back ~800x of margin -- see docs/DEAD_ENDS.md.
+#
+# Fallbacks: each fast path is wrapped in try/except and degrades to the previous
+#   path (ultimately torch.geqrf). That protects the score against a compile failure
+#   on an unseen shape, but it also means "22/22 correct" alone does NOT prove the
+#   fast path executed. Path coverage is verified separately, by kernel name, with
+#   `modal run modal_lab.py --mode profile` (see docs/METHODOLOGY.md).
+#
+# NOTE: the submission checker is a naive substring scan over this file. The literal
+#   substring "s-t-r-e-a-m" (unhyphenated) anywhere, comments included, rejects it.
 
 import torch
 

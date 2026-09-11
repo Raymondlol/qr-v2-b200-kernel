@@ -40,12 +40,33 @@ baseline from a *different* run) had two structural flaws that repeatedly bit us
 | absolute calibration (truth) | real gpumode submission | rare, deliberate (Modal ≈ official now) |
 
 ## Rules carried over
-- Submission file must contain NEITHER substring `stream` nor `graph` (incl. comments —
-  "streamline" tripped it once). `grep -niE "stream|graph" submission.py` before every submit.
+- Submission file must not contain the substring `stream` (incl. comments — "streamline" tripped it
+  once). `grep -ni "stream" submission.py` before every submit.
+  > ⚠️ **This rule used to also ban `graph`, and that half was invented.** It was enforced untested
+  > for the whole competition and it walled off CUDA graphs — the direct answer to the 40–48%
+  > launch-bound cost measured at small n. A constraint deserves the same provenance audit as a
+  > benchmark number. See `DEAD_ENDS.md` §0.
 - tf32x3 is the precision floor for n≤512 (mixed@640 margin 2.0×). Panel stays fp32.
 - Promote by overwriting `submission.py` only after a significant `compare` win + 22/22 gate.
 - CPU `harness/check_local.py` still validates the eager path + contract for free (instant),
   but it does NOT exercise the Triton kernels — use `--mode correctness` for those.
+
+## Verifying that the fast path actually ran
+`submission.py` wraps each fast path in `try/except` and degrades to the previous path (ultimately
+`torch.geqrf`). That protects the score against a compile failure on an unseen shape — but it means
+**a green 22/22 does not prove the fast kernel executed.** A silently-falling-back submission is
+correct and slow, and correctness testing alone cannot tell you which one you have.
+
+So path coverage is a separate check, done by kernel name:
+
+```bash
+modal run modal_lab.py --mode profile --subs "submission.py"
+```
+
+`--mode profile` prints the per-case op breakdown with kernel names. For a case that should be on the
+fused path, `fused_qr_k` must appear and `geqrf`/cuSOLVER kernels must not. Run it whenever routing
+changes — the routing predicates in `custom_kernel` are the thing most likely to silently stop
+matching.
 
 ## Example
 ```bash

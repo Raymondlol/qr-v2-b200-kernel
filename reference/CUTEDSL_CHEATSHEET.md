@@ -1,6 +1,6 @@
 # cute-DSL + CUTLASS cheatsheet (Blackwell sm100 / tcgen05, v4.5.2)
 
-> Working reference for building tensor-core kernels in NVIDIA's CUTLASS Python DSL ("cute-DSL"), with Flash-Attention-4 as the worked example corpus. This area is new and fast-moving with little training-data coverage — treat the **§10 review notes** as the honesty layer (corrections + what to verify on B200). FA4 source: `~/Downloads/flash-attention-main 2/flash_attn/cute`. Regenerated 2026-06-28 via multi-agent research (official docs + FA4 mining).
+> **What this is, and what it is not.** A working reference for building tensor-core kernels in NVIDIA's CUTLASS Python DSL ("cute-DSL") on Blackwell, with Flash-Attention-4 as the worked-example corpus. **It is reference material about someone else's library, not a contribution of this project** — it lives in `reference/` for that reason, and it is the largest file in this repo by a wide margin. It was assembled on 2026-06-28 by an LLM research pass over the official CUTLASS docs plus a reading of the public FA4 `flash_attn/cute` sources, then partially spot-checked on a B200. **Treat it accordingly:** §10 is the honesty layer (known corrections + what still needs verifying on hardware), and every API name in here is verify-on-wheel — the DSL is in public beta and moves. The cute-DSL engine this was written to support was never finished and never submitted; see `docs/HOW_LEADERS_ARE_FAST.md` §5.5 for why picking cute-DSL as the vehicle was itself a mistake.
 
 ## 1. Orientation, setup & mental model
 

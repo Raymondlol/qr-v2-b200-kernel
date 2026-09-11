@@ -1,12 +1,13 @@
-# ============================ SubmissionV7 (implicit-V DLARFB) ============================
-# V7 = V5 tf32x3 + IMPLICIT-V apply: _apply_block (n<=512) loads V from H with a triangular
-# mask in 3 tf32x3 kernels (_iv_VtV gram, _iv_VtC, _iv_VYsub in-place) -> V never materialized
-# (kills torch.tril + glue). Lab vs V5 (same container): geomean 1.040x FASTER, 22/22, no
-# regressions (n176 -13.5%, n352 -12%, n512 ~-2.9%). Precision identical to V5 (same V values /
-# tf32x3 / tf32 solve) -> mixed@640 margin preserved by construction. n>=1024 keeps V5's explicit
-# 1xTF32 path. Modal est ~5700-5770us official (PENDING gpumode confirm). Prior versions kept:
-# milestones/submissionV5_tf32x3_official5915us.py; V6 fp16x3 = official WASH (reverted, tag fp16x3-win).
-# =========================================================================================
+# === milestone: V10 (fused one-shot kernel, n<=512) ===
+# Official GPU MODE qr_v2 geomean: 5,343 us, leaderboard submission id 838292.
+# Runnable as-is; this is the scored artifact, not a cleaned-up rewrite.
+# NOTE: The original header comment BELOW is stale and belongs to V9 -- it was copied
+#   when this file was branched and never updated. This file is V10. It also lived
+#   only on branch `persistent-engine` until 2026-09-11 while README/JOURNAL both
+#   pointed at it as if it were here; recovered then, content unchanged.
+# Ladder + per-file provenance: milestones/README.md
+#
+# === SubmissionV9 = V5 + glue fusion (M-builder + V-builder + M^T-no-transpose) — OFFICIAL 5791us CONFIRMED (V5 5915, -2.1%, best) ===
 # Phase 1a proxy: ib=64 for n=512 (fused-panel route, fewer narrow updates).
 # qr_v2 submission: batched compact-Householder QR for B200. (n=2048 routed to
 # custom one-CTA panel + warps; n=4096 to cuSOLVER.) Validated 22/22.
@@ -38,6 +39,129 @@ try:
     _HAS_TRITON = True
 except Exception:
     _HAS_TRITON = False
+
+
+# ===================== FUSED one-shot kernel (n<=512 path) =====================
+# ONE CTA factors ONE [n,n] matrix end-to-end, in-kernel, serial: per sub-panel
+# { rowmagma-style factor -> in-kernel LARFT T16 -> compact-WY 2-GEMM apply }.
+# One launch, no host loop, no relaunch. Collapses V9's ~32 per-sub-panel kernel
+# launches + batched-apply round-trips into a single kernel -> kills the 40-48%
+# small-n launch-idle. tf32x3 throughout (n<=512 precision floor).
+if _HAS_TRITON:
+    @triton.jit
+    def _fused_qr_k(Hptr, tauptr, sb, sr, sc, stb,
+                    N: tl.constexpr, IB: tl.constexpr, BN: tl.constexpr,
+                    BM: tl.constexpr, BW: tl.constexpr):
+        bid = tl.program_id(0)
+        base = Hptr + bid * sb
+        rar = tl.arange(0, BN)
+        car = tl.arange(0, IB)
+        ii = tl.arange(0, IB)
+        c0 = 0
+        while c0 < N:
+            M = N - c0
+            prow = c0 + rar
+            pcol = c0 + car
+            tmask = prow < N
+            tptr = base + prow[:, None] * sr + pcol[None, :] * sc
+            tile = tl.load(tptr, mask=tmask[:, None], other=0.0)
+            for jj in range(IB):
+                colj = tl.sum(tl.where(car[None, :] == jj, tile, 0.0), axis=1)
+                alpha = tl.sum(tl.where(rar == jj, colj, 0.0))
+                xnorm2 = tl.sum(tl.where(rar > jj, colj * colj, 0.0))
+                normfull = tl.sqrt(alpha * alpha + xnorm2)
+                sgn = tl.where(alpha >= 0.0, 1.0, -1.0)
+                beta = -sgn * normfull
+                need = xnorm2 > 0.0
+                scale = tl.where(need, 1.0 / (alpha - beta), 0.0)
+                tau_jj = tl.where(need, (beta - alpha) / beta, 0.0)
+                v = tl.where(rar > jj, colj * scale, 0.0)
+                v = tl.where(rar == jj, 1.0, v)
+                w = tl.sum(v[:, None] * tile, axis=0)
+                upd = tile - tau_jj * (v[:, None] * w[None, :])
+                tile = tl.where(car[None, :] > jj, upd, tile)
+                diagval = tl.where(need, beta, alpha)
+                newcol = tl.where(rar > jj, colj * scale, colj)
+                newcol = tl.where(rar == jj, diagval, newcol)
+                tile = tl.where(car[None, :] == jj, newcol[:, None], tile)
+                tl.store(tauptr + bid * stb + c0 + jj, tau_jj)
+            tl.store(tptr, tile, mask=tmask[:, None])
+            tl.debug_barrier()
+            if c0 + IB < N:
+                tau_vec = tl.load(tauptr + bid * stb + c0 + ii)
+                G = tl.zeros((IB, IB), dtype=tl.float32)
+                mb = 0
+                while mb < M:
+                    lp = mb + tl.arange(0, BM)
+                    gr = c0 + lp
+                    rmask = gr < N
+                    vtptr = base + (c0 + car)[:, None] * sc + gr[None, :] * sr
+                    vt_raw = tl.load(vtptr, mask=rmask[None, :], other=0.0)
+                    vt = tl.where(lp[None, :] > car[:, None], vt_raw,
+                                  tl.where(lp[None, :] == car[:, None], 1.0, 0.0))
+                    vptr = base + gr[:, None] * sr + (c0 + car)[None, :] * sc
+                    v_raw = tl.load(vptr, mask=rmask[:, None], other=0.0)
+                    vv = tl.where(lp[:, None] > car[None, :], v_raw,
+                                  tl.where(lp[:, None] == car[None, :], 1.0, 0.0))
+                    G += tl.dot(vt, vv, input_precision="tf32x3")
+                    mb += BM
+                t0 = tl.sum(tl.where(ii == 0, tau_vec, 0.0))
+                T = tl.where((ii[:, None] == 0) & (ii[None, :] == 0), t0, 0.0)
+                for i in range(1, IB):
+                    ti = tl.sum(tl.where(ii == i, tau_vec, 0.0))
+                    gcol = tl.sum(tl.where(ii[None, :] == i, G, 0.0), axis=1)
+                    z = tl.where(ii < i, gcol, 0.0)
+                    mvec = tl.sum(T * z[None, :], axis=1)
+                    newc = tl.where(ii < i, -ti * mvec, tl.where(ii == i, ti, 0.0))
+                    T = tl.where(ii[None, :] == i, newc[:, None], T)
+                Tt = tl.trans(T)
+                nb = c0 + IB
+                while nb < N:
+                    qcol = nb + tl.arange(0, BW)
+                    cmask_n = qcol < N
+                    W1 = tl.zeros((IB, BW), dtype=tl.float32)
+                    mb = 0
+                    while mb < M:
+                        lp = mb + tl.arange(0, BM)
+                        gr = c0 + lp
+                        rmask = gr < N
+                        vtptr = base + (c0 + car)[:, None] * sc + gr[None, :] * sr
+                        vt_raw = tl.load(vtptr, mask=rmask[None, :], other=0.0)
+                        vt = tl.where(lp[None, :] > car[:, None], vt_raw,
+                                      tl.where(lp[None, :] == car[:, None], 1.0, 0.0))
+                        cptr = base + gr[:, None] * sr + qcol[None, :] * sc
+                        Ct = tl.load(cptr, mask=rmask[:, None] & cmask_n[None, :], other=0.0)
+                        W1 += tl.dot(vt, Ct, input_precision="tf32x3")
+                        mb += BM
+                    W2 = tl.dot(Tt, W1, input_precision="tf32x3")
+                    mb = 0
+                    while mb < M:
+                        lp = mb + tl.arange(0, BM)
+                        gr = c0 + lp
+                        rmask = gr < N
+                        vptr = base + gr[:, None] * sr + (c0 + car)[None, :] * sc
+                        v_raw = tl.load(vptr, mask=rmask[:, None], other=0.0)
+                        vv = tl.where(lp[:, None] > car[None, :], v_raw,
+                                      tl.where(lp[:, None] == car[None, :], 1.0, 0.0))
+                        delta = tl.dot(vv, W2, input_precision="tf32x3")
+                        cptr = base + gr[:, None] * sr + qcol[None, :] * sc
+                        full = rmask[:, None] & cmask_n[None, :]
+                        Cold = tl.load(cptr, mask=full, other=0.0)
+                        tl.store(cptr, Cold - delta, mask=full)
+                        mb += BM
+                    nb += BW
+            tl.debug_barrier()
+            c0 += IB
+
+    def _fused_qr(A, IB=16, BM=64, BW=64, nw=4):
+        B, n, _ = A.shape
+        H = A.clone().contiguous()
+        tau = torch.zeros(B, n, device=A.device, dtype=A.dtype)
+        sb, sr, sc = H.stride()
+        BN = triton.next_power_of_2(n)
+        _fused_qr_k[(B,)](H, tau, sb, sr, sc, tau.stride(0),
+                          N=n, IB=IB, BN=BN, BM=BM, BW=BW, num_warps=nw)
+        return H, tau
 
 
 if _HAS_TRITON:
@@ -141,6 +265,52 @@ def _bmm3_sub(A, B, C):
         C.stride(0), C.stride(1), C.stride(2),
     )
     return C
+
+
+if _HAS_TRITON:
+    @triton.jit
+    def _build_Mt_kernel(Gp, Tp, Mp, b, sgb, sgi, sgj, stb, sti, smb, smi, smj, BB: tl.constexpr):
+        # Outputs M^T (LOWER-tri): M_T[i,j] = G[j,i] (i>j) / 1/tau[i] (i==j) / 0 (i<j). Bit-identical
+        # to V5's M^T; lets the caller solve_triangular(M_T, W, upper=False) WITHOUT a .transpose
+        # (which cuSOLVER materializes as a copy). Fuses V5's ~7 elementwise launches into 1.
+        pb = tl.program_id(0)
+        i = tl.arange(0, BB)
+        m2 = (i[:, None] < b) & (i[None, :] < b)
+        Gt = tl.load(Gp + pb * sgb + i[None, :] * sgi + i[:, None] * sgj, mask=m2, other=0.0)  # G[j,i]
+        tau = tl.load(Tp + pb * stb + i * sti, mask=i < b, other=1.0)
+        nz = tau != 0.0
+        inv = tl.where(nz, 1.0 / tl.where(nz, tau, 1.0), 1e30)
+        M = tl.where(i[:, None] > i[None, :], Gt, 0.0)
+        M = tl.where(i[:, None] == i[None, :], inv[:, None], M)
+        tl.store(Mp + pb * smb + i[:, None] * smi + i[None, :] * smj, M, mask=m2)
+
+    @triton.jit
+    def _build_V_kernel(Pp, Vp, m, b, spb, spr, spc, svb, svr, svc, BM: tl.constexpr, BB: tl.constexpr):
+        # V = strict-lower(P) + unit diag, in ONE launch (replaces torch.tril + diagonal.fill_).
+        pb = tl.program_id(0); pr = tl.program_id(1)
+        r = pr * BM + tl.arange(0, BM)[:, None]
+        c = tl.arange(0, BB)[None, :]
+        mask = (r < m) & (c < b)
+        P = tl.load(Pp + pb * spb + r * spr + c * spc, mask=mask, other=0.0)
+        V = tl.where(r < c, 0.0, tl.where(r == c, 1.0, P))
+        tl.store(Vp + pb * svb + r * svr + c * svc, V, mask=mask)
+
+
+def _build_Mt(G, tau_blk):
+    B, b, _ = G.shape
+    M = torch.empty_like(G)
+    _build_Mt_kernel[(B,)](G, tau_blk, M, b, *G.stride(), *tau_blk.stride(), *M.stride(),
+                           BB=triton.next_power_of_2(b))
+    return M
+
+
+def _build_V(P):
+    B, m, b = P.shape
+    V = torch.empty((B, m, b), device=P.device, dtype=P.dtype)
+    BM = 64
+    _build_V_kernel[(B, triton.cdiv(m, BM))](P, V, m, b, *P.stride(), *V.stride(),
+                                             BM=BM, BB=triton.next_power_of_2(b))
+    return V
 
 
 def _split_tf32(x):
@@ -258,129 +428,34 @@ if _HAS_TRITON:
         tl.store(ptr, tile, mask=tmask)
 
 
-# ----------------------------- IMPLICIT-V apply (DLARFB; V never materialized) -----
-# V is the unit-lower-trapezoidal panel: V[r,i] = 0 (r<i), 1 (r==i), H[col+r,col+i] (r>i).
-# Load V on-the-fly from H with a triangular mask in each GEMM -> kill the torch.tril
-# materialization (a standalone memory-bound op) + the glue. tf32x3 throughout.
-if _HAS_TRITON:
-    _IV_CFGS = [
-        triton.Config({'BM': 64, 'BN': 64, 'BK': 32}, num_warps=4, num_stages=3),
-        triton.Config({'BM': 128, 'BN': 64, 'BK': 32}, num_warps=4, num_stages=3),
-        triton.Config({'BM': 64, 'BN': 128, 'BK': 32}, num_warps=4, num_stages=3),
-        triton.Config({'BM': 128, 'BN': 128, 'BK': 32}, num_warps=8, num_stages=3),
-        triton.Config({'BM': 32, 'BN': 64, 'BK': 64}, num_warps=4, num_stages=3),
-    ]
-
-    @triton.autotune(configs=_IV_CFGS, key=['m', 'Wd'])
-    @triton.jit
-    def _iv_VtC(Hp, Wp, shb, shr, shc, swb, swi, swj, col, c0, m, b, Wd,
-                BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
-        # W[i,j] = sum_r V[r,i] * C[r,j];  C = H[:,col:,c0:].
-        pb = tl.program_id(0); pi = tl.program_id(1); pj = tl.program_id(2)
-        ri = pi * BM + tl.arange(0, BM); rj = pj * BN + tl.arange(0, BN); rk = tl.arange(0, BK)
-        Hb = Hp + pb * shb
-        acc = tl.zeros((BM, BN), tl.float32)
-        for k0 in range(0, m, BK):
-            r = k0 + rk
-            ah = tl.load(Hb + (col + r[None, :]) * shr + (col + ri[:, None]) * shc,
-                         mask=(r[None, :] < m) & (ri[:, None] < b), other=0.0)
-            a = tl.where(r[None, :] < ri[:, None], 0.0,
-                         tl.where(r[None, :] == ri[:, None], 1.0, ah))
-            bb = tl.load(Hb + (col + r[:, None]) * shr + (c0 + rj[None, :]) * shc,
-                         mask=(r[:, None] < m) & (rj[None, :] < Wd), other=0.0)
-            acc += tl.dot(a, bb, input_precision="tf32x3")
-        tl.store(Wp + pb * swb + ri[:, None] * swi + rj[None, :] * swj, acc,
-                 mask=(ri[:, None] < b) & (rj[None, :] < Wd))
-
-    @triton.autotune(configs=_IV_CFGS, key=['m', 'b'])
-    @triton.jit
-    def _iv_VtV(Hp, Gp, shb, shr, shc, sgb, sgi, sgj, col, m, b,
-                BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
-        # G[i,j] = sum_r V[r,i] * V[r,j]  (both operands implicit).
-        pb = tl.program_id(0); pi = tl.program_id(1); pj = tl.program_id(2)
-        ri = pi * BM + tl.arange(0, BM); rj = pj * BN + tl.arange(0, BN); rk = tl.arange(0, BK)
-        Hb = Hp + pb * shb
-        acc = tl.zeros((BM, BN), tl.float32)
-        for k0 in range(0, m, BK):
-            r = k0 + rk
-            ah = tl.load(Hb + (col + r[None, :]) * shr + (col + ri[:, None]) * shc,
-                         mask=(r[None, :] < m) & (ri[:, None] < b), other=0.0)
-            a = tl.where(r[None, :] < ri[:, None], 0.0,
-                         tl.where(r[None, :] == ri[:, None], 1.0, ah))
-            bh = tl.load(Hb + (col + r[:, None]) * shr + (col + rj[None, :]) * shc,
-                         mask=(r[:, None] < m) & (rj[None, :] < b), other=0.0)
-            bv = tl.where(r[:, None] < rj[None, :], 0.0,
-                          tl.where(r[:, None] == rj[None, :], 1.0, bh))
-            acc += tl.dot(a, bv, input_precision="tf32x3")
-        tl.store(Gp + pb * sgb + ri[:, None] * sgi + rj[None, :] * sgj, acc,
-                 mask=(ri[:, None] < b) & (rj[None, :] < b))
-
-    @triton.autotune(configs=_IV_CFGS, key=['m', 'Wd'], restore_value=['Cp'])
-    @triton.jit
-    def _iv_VYsub(Hp, Cp, Yp, shb, shr, shc, scb, scr, scc, syb, syi, syj, col, m, b, Wd,
-                  BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
-        # C[r,j] -= sum_i V[r,i] * Y[i,j], in place.  Cp = H[:,col:,c0:] view.
-        pb = tl.program_id(0); pr = tl.program_id(1); pj = tl.program_id(2)
-        rr = pr * BM + tl.arange(0, BM); rj = pj * BN + tl.arange(0, BN); rk = tl.arange(0, BK)
-        Hb = Hp + pb * shb
-        acc = tl.zeros((BM, BN), tl.float32)
-        for k0 in range(0, b, BK):
-            i = k0 + rk
-            ah = tl.load(Hb + (col + rr[:, None]) * shr + (col + i[None, :]) * shc,
-                         mask=(rr[:, None] < m) & (i[None, :] < b), other=0.0)
-            a = tl.where(rr[:, None] < i[None, :], 0.0,
-                         tl.where(rr[:, None] == i[None, :], 1.0, ah))
-            bb = tl.load(Yp + pb * syb + i[:, None] * syi + rj[None, :] * syj,
-                         mask=(i[:, None] < b) & (rj[None, :] < Wd), other=0.0)
-            acc += tl.dot(a, bb, input_precision="tf32x3")
-        cptr = Cp + pb * scb + rr[:, None] * scr + rj[None, :] * scc
-        cmask = (rr[:, None] < m) & (rj[None, :] < Wd)
-        tl.store(cptr, tl.load(cptr, mask=cmask, other=0.0) - acc, mask=cmask)
-
-
-def _apply_block_implicit(H, col, b, tau, c0, c1):
-    B, N, _ = H.shape
-    m = N - col; Wd = c1 - c0
-    shb, shr, shc = H.stride()
-    G = torch.empty((B, b, b), device=H.device, dtype=torch.float32)
-    _iv_VtV[lambda M: (B, triton.cdiv(b, M['BM']), triton.cdiv(b, M['BN']))](
-        H, G, shb, shr, shc, *G.stride(), col, m, b)
-    tau_blk = tau[:, col:col + b]
-    nz = tau_blk != 0
-    inv_tau = torch.where(nz, 1.0 / torch.where(nz, tau_blk, torch.ones_like(tau_blk)),
-                          torch.full_like(tau_blk, 1e30))
-    Mm = torch.triu(G, diagonal=1)
-    Mm.diagonal(dim1=-2, dim2=-1).copy_(inv_tau)
-    W = torch.empty((B, b, Wd), device=H.device, dtype=torch.float32)
-    _iv_VtC[lambda M: (B, triton.cdiv(b, M['BM']), triton.cdiv(Wd, M['BN']))](
-        H, W, shb, shr, shc, *W.stride(), col, c0, m, b, Wd)
-    Y = torch.linalg.solve_triangular(Mm.transpose(1, 2), W, upper=False)
-    C = H[:, col:, c0:c1]
-    _iv_VYsub[lambda M: (B, triton.cdiv(m, M['BM']), triton.cdiv(Wd, M['BN']))](
-        H, C, Y, shb, shr, shc, *C.stride(), *Y.stride(), col, m, b, Wd)
-
-
 # ----------------------------- block reflector apply -----------------------------
 def _apply_block(H, col, b, tau, c0, c1):
-    # n<=512 (tf32x3) -> IMPLICIT-V DLARFB (no torch.tril). n>=1024 -> explicit (1xTF32).
+    # Apply the width-b block reflector stored at columns [col:col+b], rows [col:],
+    # to columns [c0:c1] (rows [col:]). Compact-WY with T via one triangular solve.
     if c1 <= c0:
         return
-    if _BIG_X3 and _HAS_TRITON and H.is_cuda:
-        _apply_block_implicit(H, col, b, tau, c0, c1)
-        return
     P = H[:, col:, col:col + b]
-    V = torch.tril(P[:, :, :b], diagonal=-1)
-    V.diagonal(dim1=-2, dim2=-1).fill_(1.0)
+    # glue trimmed: tril() already returns a fresh tensor (the old .clone() was a
+    # redundant full m*b copy = a Memcpy DtoD per apply); set the unit diagonal via a
+    # diagonal view instead of arange + fancy-index.
+    if _HAS_TRITON and H.is_cuda:
+        V = _build_V(P[:, :, :b])                # strict-lower(P)+unit diag in 1 launch (2->1)
+    else:
+        V = torch.tril(P[:, :, :b], diagonal=-1)
+        V.diagonal(dim1=-2, dim2=-1).fill_(1.0)
     tau_blk = tau[:, col:col + b]
     G = _gram(V.transpose(1, 2), V)
-    nz = tau_blk != 0
-    inv_tau = torch.where(nz, 1.0 / torch.where(nz, tau_blk, torch.ones_like(tau_blk)),
-                          torch.full_like(tau_blk, 1e30))
-    M = torch.triu(G, diagonal=1)
-    M.diagonal(dim1=-2, dim2=-1).copy_(inv_tau)
+    if _HAS_TRITON and G.is_cuda:
+        M = _build_Mt(G, tau_blk)                # outputs M^T (lower-tri); 7->1, AND no solve-transpose
+    else:
+        nz = tau_blk != 0
+        inv_tau = torch.where(nz, 1.0 / torch.where(nz, tau_blk, torch.ones_like(tau_blk)),
+                              torch.full_like(tau_blk, 1e30))
+        M = torch.tril(G.transpose(1, 2).contiguous(), diagonal=-1)
+        M.diagonal(dim1=-2, dim2=-1).copy_(inv_tau)
     C = H[:, col:, c0:c1]
     W = _mm(V.transpose(1, 2), C)
-    Y = torch.linalg.solve_triangular(M.transpose(1, 2), W, upper=False)
+    Y = torch.linalg.solve_triangular(M, W, upper=False)   # M is already M^T (lower-tri) -> no .transpose
     _mm_sub(V, Y, C)   # C -= V @ Y, fused (no separate matmul output + sub_ kernel)
 
 
@@ -480,6 +555,14 @@ def custom_kernel(data):
         return torch.geqrf(A)
     if _use_geqrf(B, n):
         return torch.geqrf(A)
+    # FUSED one-shot kernel wins where the GPU is well-fed: small-n (light per-matrix,
+    # kills launch-idle) OR high-batch (enough CTAs to fill 148 SMs). n=352 b=40 loses
+    # (only 40 CTAs AND heavy BN=512 work) -> V9's all-SMs batched applies win there.
+    if _HAS_TRITON and (n <= 256 or (n <= 512 and B >= 128)):
+        try:
+            return _fused_qr(A)
+        except Exception:
+            pass                   # fall through to V9 host-driven path
     _BIG_X3 = (n <= 512)           # tf32x3 fused for n<=512; 1xTF32 for n>=1024
     try:
         return _factor_custom(A)

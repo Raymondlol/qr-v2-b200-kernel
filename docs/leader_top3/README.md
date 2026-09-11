@@ -1,4 +1,4 @@
-# archive/leader_top3/ — index to the top-3 qr_v2 submissions
+# docs/leader_top3/ — index to the top-3 qr_v2 submissions
 
 The qr_v2 submissions were published on the
 [leaderboard](https://www.gpumode.com/leaderboard/774) after the 2026-06-30 deadline. This file is my
